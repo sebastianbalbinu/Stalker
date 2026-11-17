@@ -75,5 +75,13 @@ object Ico {
     val Hide = build("hide", "M3 3l18 18M10.6 6.1A9.8 9.8 0 0 1 12 6c5 0 9 6 9 6a15.7 15.7 0 0 1-2.6 3.2M6.3 7.6C4.2 9.1 3 12 3 12s4 6 9 6a8.6 8.6 0 0 0 3.9-.9" to true)
     val Disc = build("disc", circle(12f, 12f, 8.5f) + " " + circle(12f, 12f, 2.5f) to true)
     val Pencil = build("pencil", "M4 20h4L19 9l-4-4L4 16z M13.5 6.5l4 4" to true)
+    val Moon = build("moon", "M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" to true)
+    val Lyrics = build("lyrics", "M4 6h16M4 10h16M4 14h10M4 18h7 M17 14v6 M17 14l3-1" to true)
+    val Chart = build("chart", "M4 20V10M10 20V4M16 20v-7M21 20H3" to true)
+    val Upload = build("upload", "M12 15V4M7.5 8.5L12 4l4.5 4.5M5 15v4h14v-4" to true)
+    val Download = build("download", "M12 4v11M7.5 10.5L12 15l4.5-4.5M5 15v4h14v-4" to true)
+    val PlayNext = build("playNext", "M4 6h10M4 11h10M4 16h6 M15 14v6l5-3z" to true)
+    val QueueAdd = build("queueAdd", "M4 6h12M4 11h12M4 16h7 M18 13v6M15 16h6" to true)
+    val Volume = build("volume", "M4 9h4l5-4v14l-5-4H4z M16.5 8.5a5 5 0 0 1 0 7" to true)
     val Layers = build("layers", "M12 3l9 5-9 5-9-5z M3 12l9 5 9-5M3 16l9 5 9-5" to true)
 }

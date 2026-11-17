@@ -60,7 +60,13 @@ import com.sebas.stalker.R
 import com.sebas.stalker.Track
 
 @Composable
-fun StalkerApp(vm: PlayerViewModel, hasPermission: Boolean, onRequestPermission: () -> Unit) {
+fun StalkerApp(
+    vm: PlayerViewModel,
+    hasPermission: Boolean,
+    onRequestPermission: () -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
+) {
     var tab by rememberSaveable { mutableIntStateOf(1) }
     val stack = remember { mutableStateListOf<Detail>() }
     val current by vm.current.collectAsState()
@@ -83,7 +89,7 @@ fun StalkerApp(vm: PlayerViewModel, hasPermission: Boolean, onRequestPermission:
                 0 -> PlayerScreen(vm, onClose = { tab = 1 })
                 1 -> LibraryScreen(vm, hasPermission, onRequestPermission, onOpen = { stack.add(it) })
                 2 -> EqScreen()
-                else -> SystemScreen(vm)
+                else -> SystemScreen(vm, onExport, onImport)
             }
         }
 
@@ -108,9 +114,9 @@ fun StalkerApp(vm: PlayerViewModel, hasPermission: Boolean, onRequestPermission:
 
 // ---------- Componentes compartidos ----------
 
-val Titulo = TextStyle(fontFamily = Playfair, fontSize = 40.sp, color = C.Carbon, lineHeight = 44.sp)
-val Cuerpo = TextStyle(fontFamily = Inter, fontSize = 15.sp, color = C.Carbon)
-val Secundario = TextStyle(fontFamily = Inter, fontSize = 13.sp, color = C.Tierra)
+val Titulo: TextStyle get() = TextStyle(fontFamily = Playfair, fontSize = 40.sp, color = C.Carbon, lineHeight = 44.sp)
+val Cuerpo: TextStyle get() = TextStyle(fontFamily = Inter, fontSize = 15.sp, color = C.Carbon)
+val Secundario: TextStyle get() = TextStyle(fontFamily = Inter, fontSize = 13.sp, color = C.Tierra)
 
 @Composable
 fun SoftButton(
@@ -122,7 +128,7 @@ fun SoftButton(
 ) {
     val haptic = LocalHapticFeedback.current
     Box(
-        Modifier.size(size).shadow(4.dp, CircleShape, ambientColor = C.Carbon.copy(alpha = 0.15f), spotColor = C.Carbon.copy(alpha = 0.15f))
+        Modifier.size(size).shadow(4.dp, CircleShape, ambientColor = C.Negro.copy(alpha = 0.15f), spotColor = C.Negro.copy(alpha = 0.15f))
             .clip(CircleShape).background(C.Tarjeta)
             .clickable { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick() },
         contentAlignment = Alignment.Center
@@ -135,7 +141,7 @@ fun SoftButton(
 @Composable
 fun CurtainSheet(content: @Composable ColumnScope.() -> Unit) {
     val theme by Engine.theme.collectAsState()
-    Box(Modifier.fillMaxSize().background(C.Carbon)) {
+    Box(Modifier.fillMaxSize().background(C.Negro)) {
         when (theme) {
             "Zigzag" -> Image(
                 painterResource(R.drawable.zigzag), null,
@@ -171,7 +177,7 @@ fun rememberArt(track: Track?): ImageBitmap? {
 @Composable
 fun Cover(track: Track?, modifier: Modifier, corner: Dp = 12.dp) {
     val art = rememberArt(track)
-    Box(modifier.clip(RoundedCornerShape(corner)).background(C.Carbon)) {
+    Box(modifier.clip(RoundedCornerShape(corner)).background(C.Negro)) {
         if (art != null) {
             Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
@@ -186,7 +192,7 @@ fun FallbackArt(variant: Int, modifier: Modifier) {
         0 -> Box(modifier) {
             Image(painterResource(R.drawable.telon), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         }
-        1 -> Column(modifier.background(C.Carbon)) {
+        1 -> Column(modifier.background(C.Negro)) {
             Spacer(Modifier.weight(1.1f))
             Image(painterResource(R.drawable.zigzag), null, Modifier.fillMaxWidth().weight(1f), contentScale = ContentScale.Crop)
         }
@@ -208,15 +214,15 @@ fun MiniPlayer(t: Track, playing: Boolean, onOpen: () -> Unit, onToggle: () -> U
             .padding(start = 12.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(52.dp).clip(CircleShape).background(Brush.radialGradient(listOf(C.Surco, C.Carbon))), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(52.dp).clip(CircleShape).background(Brush.radialGradient(listOf(C.Surco, C.Negro))), contentAlignment = Alignment.Center) {
             Cover(t, Modifier.size(22.dp), corner = 11.dp)
         }
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text(t.title, style = Cuerpo.copy(color = C.Marfil, fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(t.title, style = Cuerpo.copy(color = C.SobreRojo, fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(t.artist, style = Secundario.copy(color = Color(0xFFF0D9D2)), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onToggle), contentAlignment = Alignment.Center) {
-            Icon(if (playing) Ico.Pause else Ico.Play, if (playing) "Pausar" else "Reproducir", tint = C.Marfil, modifier = Modifier.size(26.dp))
+            Icon(if (playing) Ico.Pause else Ico.Play, if (playing) "Pausar" else "Reproducir", tint = C.SobreRojo, modifier = Modifier.size(26.dp))
         }
     }
 }
@@ -231,7 +237,7 @@ fun NavBar(tab: Int, onTab: (Int) -> Unit) {
     )
     Row(
         Modifier.fillMaxWidth().height(68.dp)
-            .shadow(8.dp, RoundedCornerShape(24.dp), ambientColor = C.Carbon.copy(alpha = 0.2f), spotColor = C.Carbon.copy(alpha = 0.2f))
+            .shadow(8.dp, RoundedCornerShape(24.dp), ambientColor = C.Negro.copy(alpha = 0.2f), spotColor = C.Negro.copy(alpha = 0.2f))
             .clip(RoundedCornerShape(24.dp)).background(C.Tarjeta)
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -245,7 +251,7 @@ fun NavBar(tab: Int, onTab: (Int) -> Unit) {
                     .clickable { onTab(i) },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, label, tint = if (on) C.Marfil else C.Carbon, modifier = Modifier.size(23.dp))
+                Icon(icon, label, tint = if (on) C.SobreRojo else C.Carbon, modifier = Modifier.size(23.dp))
             }
         }
     }
@@ -262,7 +268,7 @@ fun Pill(label: String, selected: Boolean, modifier: Modifier = Modifier, onClic
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, style = Cuerpo.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = if (selected) C.Marfil else C.Carbon))
+        Text(label, style = Cuerpo.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = if (selected) C.SobreRojo else C.Carbon))
     }
 }
 
@@ -270,7 +276,7 @@ fun Pill(label: String, selected: Boolean, modifier: Modifier = Modifier, onClic
 fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier.fillMaxWidth()
-            .shadow(3.dp, RoundedCornerShape(18.dp), ambientColor = C.Carbon.copy(alpha = 0.1f), spotColor = C.Carbon.copy(alpha = 0.1f))
+            .shadow(3.dp, RoundedCornerShape(18.dp), ambientColor = C.Negro.copy(alpha = 0.1f), spotColor = C.Negro.copy(alpha = 0.1f))
             .clip(RoundedCornerShape(18.dp)).background(C.Tarjeta),
         content = content
     )

@@ -98,6 +98,31 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun seek(ms: Long) { controller?.seekTo(ms) }
 
+    /** Suena justo después de la canción actual. */
+    fun playNext(tracks: List<Track>) {
+        val c = controller ?: return
+        if (tracks.isEmpty()) return
+        val items = tracks.map { Engine.mediaItem(it) }
+        if (c.mediaItemCount == 0) {
+            playList(tracks, 0, "Cola")
+        } else {
+            c.addMediaItems(c.currentMediaItemIndex + 1, items)
+        }
+    }
+
+    /** Al final de la cola. */
+    fun addToQueue(tracks: List<Track>) {
+        val c = controller ?: return
+        if (tracks.isEmpty()) return
+        if (c.mediaItemCount == 0) playList(tracks, 0, "Cola")
+        else c.addMediaItems(tracks.map { Engine.mediaItem(it) })
+    }
+
+    fun removeFromQueue(i: Int) {
+        val c = controller ?: return
+        if (i in 0 until c.mediaItemCount && i != c.currentMediaItemIndex) c.removeMediaItem(i)
+    }
+
     fun jumpTo(i: Int) {
         val c = controller ?: return
         c.seekTo(i, 0L)

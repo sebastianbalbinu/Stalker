@@ -42,7 +42,7 @@ import com.sebas.stalker.PlayerViewModel
 import com.sebas.stalker.R
 
 @Composable
-fun SystemScreen(vm: PlayerViewModel) {
+fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit) {
     val mode by Engine.outputMode.collectAsState()
     val status by Engine.outputStatus.collectAsState()
     val usb by Engine.usbDevice.collectAsState()
@@ -51,6 +51,9 @@ fun SystemScreen(vm: PlayerViewModel) {
     val hAlbums by Engine.hiddenAlbums.collectAsState()
     val hTracks by Engine.hiddenTracks.collectAsState()
     var showHidden by remember { mutableStateOf(false) }
+    var showStats by remember { mutableStateOf(false) }
+    val night by Engine.nightMode.collectAsState()
+    val rg by Engine.replayGain.collectAsState()
     val ctx = LocalContext.current
     val version = remember {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "1.0"
@@ -98,7 +101,24 @@ fun SystemScreen(vm: PlayerViewModel) {
             }
 
             Spacer(Modifier.height(18.dp))
+            Text("Volumen parejo (ReplayGain)", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
+            Spacer(Modifier.height(4.dp))
+            Text("Iguala el volumen entre discos usando las etiquetas del FLAC. No actúa en Bit-perfect.", style = Secundario.copy(fontSize = 12.sp))
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Apagado", "Pista", "Álbum").forEach { m ->
+                    Pill(m, selected = rg == m, modifier = Modifier.weight(1f)) { Engine.setReplayGain(m) }
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
             Text("Apariencia", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Claro", "Noche", "Sistema").forEach { m ->
+                    Pill(m, selected = night == m, modifier = Modifier.weight(1f)) { Engine.setNight(m) }
+                }
+            }
             Spacer(Modifier.height(10.dp))
             Card {
                 Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -129,6 +149,15 @@ fun SystemScreen(vm: PlayerViewModel) {
 
             Spacer(Modifier.height(18.dp))
             Card {
+                SettingRow(Ico.Chart, "Tus estadísticas", "Discos y canciones más escuchados") { showStats = true }
+                HorizontalDivider(color = C.Arena, thickness = 1.dp)
+                SettingRow(Ico.Upload, "Guardar respaldo", "Discos, favoritos, ocultos, estadísticas y ajustes en un archivo") { onExport() }
+                HorizontalDivider(color = C.Arena, thickness = 1.dp)
+                SettingRow(Ico.Download, "Restaurar respaldo", "Desde un archivo de Stalker, por ejemplo en otro celular") { onImport() }
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Card {
                 Row(
                     Modifier.fillMaxWidth().clickable { vm.rescan() }.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -153,7 +182,7 @@ fun SystemScreen(vm: PlayerViewModel) {
                 }
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Ico.Layers, null, tint = C.Carbon, modifier = Modifier.size(22.dp))
+                    Image(painterResource(R.drawable.logo), null, Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)))
                     Column(Modifier.weight(1f).padding(start = 14.dp)) {
                         Text("Acerca de Stalker", style = Cuerpo.copy(fontWeight = FontWeight.Medium))
                         Text("Versión $version · Media3 · FLAC / WAV / ALAC / MP3", style = Secundario.copy(fontSize = 12.sp))
@@ -163,5 +192,18 @@ fun SystemScreen(vm: PlayerViewModel) {
         }
     }
     if (showHidden) HiddenSheet { showHidden = false }
+    if (showStats) StatsSheet { showStats = false }
 }
 
+
+@Composable
+private fun SettingRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, sub: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = C.Carbon, modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f).padding(start = 14.dp)) {
+            Text(title, style = Cuerpo.copy(fontWeight = FontWeight.Medium))
+            Text(sub, style = Secundario.copy(fontSize = 12.sp))
+        }
+        Icon(Ico.Right, null, tint = C.Tierra, modifier = Modifier.size(16.dp))
+    }
+}

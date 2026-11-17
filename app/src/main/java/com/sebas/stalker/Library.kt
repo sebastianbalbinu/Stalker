@@ -162,8 +162,17 @@ object Library {
         }
     }
 
-    private fun readFlac(context: Context, uri: Uri): AudioInfo? = try {
-        context.contentResolver.openInputStream(uri)?.use { s ->
+    private fun readFlac(context: Context, uri: Uri): AudioInfo? = readFlacMeta(context, uri)?.first
+
+    /** Etiquetas Vorbis del FLAC (LYRICS, REPLAYGAIN_*…), con claves en mayúsculas. */
+    suspend fun flacTags(context: Context, track: Track): Map<String, String> = withContext(Dispatchers.IO) {
+        if (!track.mime.contains("flac", ignoreCase = true)) return@withContext emptyMap()
+        readFlacMeta(context, track.uri)?.second ?: emptyMap()
+    }
+
+    private fun readFlacMeta(context: Context, uri: Uri): Pair<AudioInfo?, Map<String, String>>? = try {
+        context.contentResolver.openInputStream(uri)?.use { raw ->
+            val s = java.io.BufferedInputStream(raw, 65536)
             var head = readFully(s, 4) ?: return@use null
             if (head[0] == 'I'.code.toByte() && head[1] == 'D'.code.toByte() && head[2] == '3'.code.toByte()) {
                 val rest = readFully(s, 6) ?: return@use null
@@ -173,19 +182,59 @@ object Library {
                 head = readFully(s, 4) ?: return@use null
             }
             if (String(head, Charsets.US_ASCII) != "fLaC") return@use null
-            readFully(s, 4) ?: return@use null // encabezado del bloque STREAMINFO
-            val si = readFully(s, 34) ?: return@use null
-            val b10 = si[10].toInt() and 0xff
-            val b11 = si[11].toInt() and 0xff
-            val b12 = si[12].toInt() and 0xff
-            val b13 = si[13].toInt() and 0xff
-            val sampleRate = (b10 shl 12) or (b11 shl 4) or (b12 shr 4)
-            val channels = ((b12 shr 1) and 0x7) + 1
-            val bits = (((b12 and 0x1) shl 4) or (b13 shr 4)) + 1
-            if (sampleRate <= 0) null else AudioInfo("FLAC", sampleRate, bits, channels)
+            var info: AudioInfo? = null
+            val tags = HashMap<String, String>()
+            var last = false
+            var guard = 0
+            while (!last && guard++ < 64) {
+                val bh = readFully(s, 4) ?: break
+                last = (bh[0].toInt() and 0x80) != 0
+                val type = bh[0].toInt() and 0x7f
+                val len = ((bh[1].toInt() and 0xff) shl 16) or ((bh[2].toInt() and 0xff) shl 8) or (bh[3].toInt() and 0xff)
+                when (type) {
+                    0 -> {
+                        val si = readFully(s, len) ?: break
+                        val b10 = si[10].toInt() and 0xff
+                        val b11 = si[11].toInt() and 0xff
+                        val b12 = si[12].toInt() and 0xff
+                        val b13 = si[13].toInt() and 0xff
+                        val sampleRate = (b10 shl 12) or (b11 shl 4) or (b12 shr 4)
+                        val channels = ((b12 shr 1) and 0x7) + 1
+                        val bits = (((b12 and 0x1) shl 4) or (b13 shr 4)) + 1
+                        if (sampleRate > 0) info = AudioInfo("FLAC", sampleRate, bits, channels)
+                    }
+                    4 -> {
+                        if (len > 4_000_000) { skipFully(s, len.toLong()); continue }
+                        val vc = readFully(s, len) ?: break
+                        parseVorbis(vc, tags)
+                    }
+                    else -> skipFully(s, len.toLong())
+                }
+            }
+            Pair(info, tags as Map<String, String>)
         }
     } catch (e: Exception) {
         null
+    }
+
+    private fun le32(b: ByteArray, i: Int): Int =
+        (b[i].toInt() and 0xff) or ((b[i + 1].toInt() and 0xff) shl 8) or
+            ((b[i + 2].toInt() and 0xff) shl 16) or ((b[i + 3].toInt() and 0xff) shl 24)
+
+    private fun parseVorbis(b: ByteArray, out: MutableMap<String, String>) {
+        var i = 0
+        if (b.size < 8) return
+        val vendorLen = le32(b, i); i += 4 + vendorLen
+        if (i + 4 > b.size) return
+        val count = le32(b, i); i += 4
+        for (n in 0 until count) {
+            if (i + 4 > b.size) return
+            val l = le32(b, i); i += 4
+            if (l < 0 || i + l > b.size) return
+            val kv = String(b, i, l, Charsets.UTF_8); i += l
+            val eq = kv.indexOf('=')
+            if (eq > 0) out[kv.substring(0, eq).uppercase()] = kv.substring(eq + 1)
+        }
     }
 }
 

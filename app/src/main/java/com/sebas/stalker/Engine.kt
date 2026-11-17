@@ -80,6 +80,27 @@ object Engine {
     /** Nombre del disco/álbum que está sonando. */
     val queueTitle = MutableStateFlow<String?>(null)
 
+    /** "Claro", "Noche" o "Sistema". */
+    val nightMode = MutableStateFlow("Sistema")
+    /** "Apagado", "Pista" o "Álbum". */
+    val replayGain = MutableStateFlow("Apagado")
+    val replayGainStatus = MutableStateFlow("")
+
+    /** Etiquetas del FLAC que suena (letra, ReplayGain…), en mayúsculas. */
+    val currentTags = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /** Temporizador para dormir: hora de apagado (ms) o "al terminar el disco". */
+    val sleepAt = MutableStateFlow<Long?>(null)
+    val sleepEndOfDisco = MutableStateFlow(false)
+
+    // Estadísticas
+    val playCounts = MutableStateFlow<Map<Long, Int>>(emptyMap())
+    val albumLastPlayed = MutableStateFlow<Map<Long, Long>>(emptyMap())
+    val listenedMs = MutableStateFlow(0L)
+
+    /** Posición guardada de archivos largos (mezclas, audiolibros). */
+    private var positions: MutableMap<Long, Long> = mutableMapOf()
+
     private var prefs: SharedPreferences? = null
 
     val presets: Map<String, List<Int>> = linkedMapOf(
@@ -106,6 +127,174 @@ object Engine {
         hiddenTracks.value = readIds(p.getString("hiddenTracks", ""))
         discos.value = readDiscos(p.getString("discos", "[]") ?: "[]")
         queueTitle.value = p.getString("queueTitle", null)
+        nightMode.value = p.getString("night", "Sistema") ?: "Sistema"
+        replayGain.value = p.getString("replayGain", "Apagado") ?: "Apagado"
+        playCounts.value = readLongMap(p.getString("playCounts", "{}")).mapValues { it.value.toInt() }
+        albumLastPlayed.value = readLongMap(p.getString("albumLast", "{}"))
+        positions = readLongMap(p.getString("positions", "{}")).toMutableMap()
+        listenedMs.value = p.getLong("listenedMs", 0L)
+    }
+
+    private fun readLongMap(s: String?): Map<Long, Long> = try {
+        val o = JSONObject(s ?: "{}")
+        o.keys().asSequence().mapNotNull { k -> k.toLongOrNull()?.let { it to o.getLong(k) } }.toMap()
+    } catch (e: Exception) {
+        emptyMap()
+    }
+
+    private fun writeLongMap(key: String, m: Map<Long, Number>) {
+        val o = JSONObject()
+        m.forEach { (k, v) -> o.put(k.toString(), v.toLong()) }
+        prefs?.edit()?.putString(key, o.toString())?.apply()
+    }
+
+    fun setNight(mode: String) {
+        nightMode.value = mode
+        prefs?.edit()?.putString("night", mode)?.apply()
+    }
+
+    fun setReplayGain(mode: String) {
+        replayGain.value = mode
+        prefs?.edit()?.putString("replayGain", mode)?.apply()
+    }
+
+    // ---------- Estadísticas ----------
+
+    fun countPlay(t: Track) {
+        val m = playCounts.value.toMutableMap()
+        m[t.id] = (m[t.id] ?: 0) + 1
+        playCounts.value = m
+        writeLongMap("playCounts", m)
+        val a = albumLastPlayed.value.toMutableMap()
+        a[t.albumId] = System.currentTimeMillis()
+        albumLastPlayed.value = a
+        writeLongMap("albumLast", a)
+    }
+
+    fun addListened(ms: Long) {
+        listenedMs.value += ms
+    }
+
+    fun flushListened() {
+        prefs?.edit()?.putLong("listenedMs", listenedMs.value)?.apply()
+    }
+
+    // ---------- Archivos largos ----------
+
+    fun savePosition(trackId: Long, pos: Long) {
+        positions[trackId] = pos
+        writeLongMap("positions", positions)
+    }
+
+    fun positionOf(trackId: Long): Long = positions[trackId] ?: 0L
+
+    // ---------- Respaldo ----------
+
+    private fun trackKey(t: Track) = JSONObject().apply {
+        put("id", t.id); put("title", t.title); put("artist", t.artist); put("album", t.album)
+    }
+
+    private fun findTrack(o: JSONObject): Track? {
+        byId[o.optLong("id").toString()]?.let {
+            if (it.title == o.optString("title")) return it
+        }
+        return tracks.value.firstOrNull {
+            it.title == o.optString("title") && it.artist == o.optString("artist") && it.album == o.optString("album")
+        }
+    }
+
+    fun exportJson(): String {
+        val root = JSONObject()
+        root.put("app", "Stalker")
+        root.put("version", 1)
+        root.put("discos", JSONArray().apply {
+            discos.value.forEach { d ->
+                put(JSONObject().apply {
+                    put("name", d.name)
+                    put("tracks", JSONArray().apply { discoTracks(d).forEach { put(trackKey(it)) } })
+                })
+            }
+        })
+        fun albumKeys(ids: Set<Long>) = JSONArray().apply {
+            albums(tracks.value).filter { it.id in ids }.forEach { a ->
+                put(JSONObject().apply { put("album", a.title); put("artist", a.artist) })
+            }
+        }
+        root.put("favorites", albumKeys(favorites.value))
+        root.put("hiddenAlbums", albumKeys(hiddenAlbums.value))
+        root.put("hiddenTracks", JSONArray().apply {
+            tracks.value.filter { it.id in hiddenTracks.value }.forEach { put(trackKey(it)) }
+        })
+        root.put("playCounts", JSONArray().apply {
+            playCounts.value.forEach { (id, n) ->
+                byId[id.toString()]?.let { t -> put(trackKey(t).apply { put("count", n) }) }
+            }
+        })
+        root.put("listenedMs", listenedMs.value)
+        root.put("settings", JSONObject().apply {
+            put("mode", outputMode.value.name); put("eqOn", eqEnabled.value); put("eqPreset", eqPreset.value)
+            put("theme", theme.value); put("night", nightMode.value); put("replayGain", replayGain.value)
+        })
+        return root.toString(2)
+    }
+
+    /** Devuelve un resumen de lo restaurado. */
+    fun importJson(text: String): String {
+        val root = JSONObject(text)
+        val all = albums(tracks.value)
+        fun albumIds(arr: JSONArray?): Set<Long> {
+            if (arr == null) return emptySet()
+            return (0 until arr.length()).mapNotNull { i ->
+                val o = arr.getJSONObject(i)
+                all.firstOrNull { it.title == o.optString("album") && it.artist == o.optString("artist") }?.id
+            }.toSet()
+        }
+        var discosOk = 0
+        root.optJSONArray("discos")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val ts = o.optJSONArray("tracks") ?: JSONArray()
+                val ids = (0 until ts.length()).mapNotNull { findTrack(ts.getJSONObject(it))?.id }
+                val name = o.optString("name", "Disco")
+                if (discos.value.none { it.name == name }) {
+                    createDisco(name, ids)
+                    discosOk++
+                }
+            }
+        }
+        val fav = albumIds(root.optJSONArray("favorites"))
+        favorites.value = favorites.value + fav
+        writeIds("favorites", favorites.value)
+        hiddenAlbums.value = hiddenAlbums.value + albumIds(root.optJSONArray("hiddenAlbums"))
+        writeIds("hiddenAlbums", hiddenAlbums.value)
+        root.optJSONArray("hiddenTracks")?.let { arr ->
+            val ids = (0 until arr.length()).mapNotNull { findTrack(arr.getJSONObject(it))?.id }
+            hiddenTracks.value = hiddenTracks.value + ids
+            writeIds("hiddenTracks", hiddenTracks.value)
+        }
+        root.optJSONArray("playCounts")?.let { arr ->
+            val m = playCounts.value.toMutableMap()
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val t = findTrack(o) ?: continue
+                m[t.id] = maxOf(m[t.id] ?: 0, o.optInt("count"))
+            }
+            playCounts.value = m
+            writeLongMap("playCounts", m)
+        }
+        if (root.has("listenedMs")) {
+            listenedMs.value = maxOf(listenedMs.value, root.optLong("listenedMs"))
+            flushListened()
+        }
+        root.optJSONObject("settings")?.let { st ->
+            runCatching { setMode(OutputMode.valueOf(st.optString("mode", outputMode.value.name))) }
+            setEq(st.optBoolean("eqOn", eqEnabled.value))
+            setPreset(st.optString("eqPreset", eqPreset.value))
+            setTheme(st.optString("theme", theme.value))
+            setNight(st.optString("night", nightMode.value))
+            setReplayGain(st.optString("replayGain", replayGain.value))
+        }
+        return "Restaurado: $discosOk discos, ${fav.size} favoritos"
     }
 
     private fun readIds(s: String?): Set<Long> =
@@ -250,6 +439,7 @@ object Engine {
                     .setTitle(t.title)
                     .setArtist(t.artist)
                     .setAlbumTitle(t.album)
+                    .setArtworkUri(t.uri) // la carátula la saca nuestro cargador de imágenes
                     .build()
             )
             .build()

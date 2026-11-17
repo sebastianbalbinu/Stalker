@@ -48,9 +48,9 @@ fun EqScreen() {
                 checked = on,
                 onCheckedChange = { Engine.setEq(it) },
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = C.Marfil,
+                    checkedThumbColor = C.SobreRojo,
                     checkedTrackColor = C.Rojo,
-                    uncheckedThumbColor = C.Marfil,
+                    uncheckedThumbColor = C.SobreRojo,
                     uncheckedTrackColor = C.Piedra,
                     uncheckedBorderColor = C.Piedra,
                 )

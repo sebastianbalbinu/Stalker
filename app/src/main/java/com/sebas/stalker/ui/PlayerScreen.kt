@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +44,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -76,6 +80,12 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
     val usb by Engine.usbDevice.collectAsState()
     val queueTitle by Engine.queueTitle.collectAsState()
     var showQueue by remember { mutableStateOf(false) }
+    var showTimer by remember { mutableStateOf(false) }
+    var showLyrics by remember { mutableStateOf(false) }
+    val sleepAt by Engine.sleepAt.collectAsState()
+    val sleepEnd by Engine.sleepEndOfDisco.collectAsState()
+    val tags by Engine.currentTags.collectAsState()
+    val rgStatus by Engine.replayGainStatus.collectAsState()
     val haptic = LocalHapticFeedback.current
 
     Column(
@@ -85,7 +95,11 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             SoftButton(Ico.Down, "Volver a la biblioteca", onClick = onClose)
-            Text("Stalker", style = Titulo.copy(fontSize = 28.sp, textAlign = TextAlign.Center), modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(10.dp))
+            SoftButton(Ico.Moon, "Temporizador", tint = if (sleepAt != null || sleepEnd) C.Rojo else C.Carbon) { showTimer = true }
+            Text("Stalker", style = Titulo.copy(fontSize = 26.sp, textAlign = TextAlign.Center), modifier = Modifier.weight(1f), maxLines = 1)
+            SoftButton(Ico.Lyrics, "Letra") { showLyrics = true }
+            Spacer(Modifier.width(10.dp))
             SoftButton(Ico.ListIco, "Pistas del disco") { if (queue.isNotEmpty()) showQueue = true }
         }
 
@@ -93,11 +107,17 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Vinyl(
                 track, playing,
-                Modifier.padding(vertical = 6.dp).aspectRatio(1f)
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        vm.toggle()
-                    }
+                Modifier.padding(vertical = 6.dp).aspectRatio(1f),
+                onTap = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    vm.toggle()
+                },
+                onSwipe = { forward ->
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    if (forward) vm.next() else vm.previous()
+                },
+                onScratchStart = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
+                onScratch = { deltaMs -> vm.seek((vm.positionMs.value + deltaMs).coerceIn(0L, dur.coerceAtLeast(0L))) },
             )
         }
 
@@ -135,7 +155,7 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(if (playing) Ico.Pause else Ico.Play, if (playing) "Pausar" else "Reproducir", tint = C.Marfil, modifier = Modifier.size(30.dp))
+                Icon(if (playing) Ico.Pause else Ico.Play, if (playing) "Pausar" else "Reproducir", tint = C.SobreRojo, modifier = Modifier.size(30.dp))
             }
             SoftButton(Ico.Next, "Siguiente", size = 58.dp) { vm.next() }
             SoftButton(
@@ -154,14 +174,21 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
             Icon(Ico.Wave, null, tint = C.Rojo, modifier = Modifier.size(22.dp))
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(info?.label() ?: "—", style = Cuerpo.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium), maxLines = 1)
-                Text(status, style = Secundario.copy(fontSize = 11.sp, lineHeight = 14.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    if (rgStatus.isNotBlank()) "$status · $rgStatus" else status,
+                    style = Secundario.copy(fontSize = 11.sp, lineHeight = 14.sp), maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
             }
             Icon(Ico.Headphones, if (usb != null) "DAC USB conectado" else "Sin DAC USB", tint = if (usb != null) C.Rojo else C.Piedra, modifier = Modifier.size(20.dp))
         }
     }
 
     if (showQueue) {
-        QueueSheet(queueTitle, queue, index, onPick = { vm.jumpTo(it) }, onDismiss = { showQueue = false })
+        QueueSheet(queueTitle, queue, index, onPick = { vm.jumpTo(it) }, onRemove = { vm.removeFromQueue(it) }, onDismiss = { showQueue = false })
+    }
+    if (showTimer) TimerSheet { showTimer = false }
+    if (showLyrics) {
+        LyricsSheet(tags, pos, track?.title, onSeek = { vm.seek(it) }, onDismiss = { showLyrics = false })
     }
 }
 
@@ -209,7 +236,7 @@ fun ProgressBar(pos: Long, dur: Long, enabled: Boolean, onSeek: (Long) -> Unit) 
 fun VinylGrooves(modifier: Modifier) {
     Canvas(modifier) {
         val r = size.minDimension / 2f
-        drawCircle(C.Carbon, r)
+        drawCircle(C.Negro, r)
         var rr = r - 3f
         val inner = r * 0.38f
         while (rr > inner) {
@@ -224,10 +251,20 @@ fun VinylGrooves(modifier: Modifier) {
  * así gira aunque el ahorro de batería desactive las animaciones. Arranca y frena suave, como un tocadiscos.
  */
 @Composable
-fun Vinyl(track: Track?, playing: Boolean, modifier: Modifier) {
+fun Vinyl(
+    track: Track?,
+    playing: Boolean,
+    modifier: Modifier,
+    onTap: () -> Unit = {},
+    onSwipe: (Boolean) -> Unit = {},
+    onScratchStart: () -> Unit = {},
+    onScratch: (Long) -> Unit = {},
+) {
     val angle = remember { mutableFloatStateOf(0f) }
     val speed = remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(playing) {
+    var scratching by remember { mutableStateOf(false) }
+    LaunchedEffect(playing, scratching) {
+        if (scratching) return@LaunchedEffect
         var last = 0L
         while (true) {
             val stop = withFrameNanos { now ->
@@ -244,46 +281,143 @@ fun Vinyl(track: Track?, playing: Boolean, modifier: Modifier) {
             }
         }
     }
-    val art = rememberArt(track)
-    Box(modifier.shadow(22.dp, CircleShape, ambientColor = C.Carbon, spotColor = C.Carbon), contentAlignment = Alignment.Center) {
-        Box(Modifier.fillMaxSize().graphicsLayer { rotationZ = angle.floatValue }, contentAlignment = Alignment.Center) {
-            VinylGrooves(Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize(0.37f).clip(CircleShape).background(C.Rojo), contentAlignment = Alignment.Center) {
-                if (art != null) {
-                    Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                } else {
-                    Image(painterResource(R.drawable.telon), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                    Column(Modifier.fillMaxSize()) {
-                        Spacer(Modifier.weight(1f))
-                        Text("Stalker", style = Titulo.copy(fontSize = 18.sp, color = C.Marfil, textAlign = TextAlign.Center), modifier = Modifier.fillMaxWidth())
-                        Spacer(Modifier.weight(0.6f))
-                        Image(
-                            painterResource(R.drawable.zigzag), null,
-                            Modifier.fillMaxWidth().weight(0.9f), contentScale = ContentScale.Crop
-                        )
-                    }
-                }
-                Box(Modifier.size(10.dp).clip(CircleShape).background(C.Carbon))
+    // Brazo del tocadiscos: baja sobre el disco al sonar, vuelve a su apoyo en pausa.
+    val arm = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(playing) {
+        val target = if (playing) 1f else 0f
+        var last = 0L
+        while (kotlin.math.abs(arm.floatValue - target) > 0.002f) {
+            withFrameNanos { now ->
+                val dt = if (last == 0L) 0f else (now - last) / 1_000_000_000f
+                last = now
+                arm.floatValue += (target - arm.floatValue) * min(1f, dt * 5f)
             }
         }
-        // Brillo fijo (no gira), como la luz de la sala sobre el disco.
-        Canvas(Modifier.fillMaxSize()) {
-            val r = size.minDimension / 2f
-            drawCircle(
-                brush = Brush.sweepGradient(
-                    0f to Color.Transparent,
-                    0.06f to C.Rojo.copy(alpha = 0.5f),
-                    0.16f to Color.Transparent,
-                    0.55f to Color.Transparent,
-                    0.62f to Color.White.copy(alpha = 0.10f),
-                    0.70f to Color.Transparent,
-                    1f to Color.Transparent,
-                    center = Offset(size.width / 2f, size.height / 2f)
-                ),
-                radius = r * 0.69f,
-                style = Stroke(width = r * 0.62f)
-            )
-            drawCircle(C.Carbon, r * 0.385f, style = Stroke(width = 3f))
+        arm.floatValue = target
+    }
+    val art = rememberArt(track)
+    val swipeDx = remember { mutableFloatStateOf(0f) }
+    Box(
+        modifier
+            .pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { swipeDx.floatValue = 0f },
+                    onDragEnd = {
+                        if (kotlin.math.abs(swipeDx.floatValue) > size.width * 0.22f) onSwipe(swipeDx.floatValue < 0f)
+                        swipeDx.floatValue = 0f
+                    },
+                    onDragCancel = { swipeDx.floatValue = 0f },
+                    onHorizontalDrag = { _, dx -> swipeDx.floatValue += dx },
+                )
+            }
+            .pointerInput(Unit) {
+                // Mantén presionado y gira el disco con el dedo para adelantar o retroceder, como un DJ.
+                var prev = 0f
+                var accum = 0f
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { o ->
+                        scratching = true
+                        accum = 0f
+                        prev = kotlin.math.atan2(o.y - size.height / 2f, o.x - size.width / 2f)
+                        onScratchStart()
+                    },
+                    onDragEnd = {
+                        scratching = false
+                        onScratch((accum * 100).toLong())
+                    },
+                    onDragCancel = { scratching = false },
+                    onDrag = { change, _ ->
+                        val p = change.position
+                        val a = kotlin.math.atan2(p.y - size.height / 2f, p.x - size.width / 2f)
+                        var d = Math.toDegrees((a - prev).toDouble()).toFloat()
+                        if (d > 180f) d -= 360f
+                        if (d < -180f) d += 360f
+                        prev = a
+                        accum += d
+                        angle.floatValue = (angle.floatValue + d) % 360f
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier.fillMaxSize(0.9f).graphicsLayer {
+                translationX = swipeDx.floatValue * 0.25f
+            }.shadow(22.dp, CircleShape, ambientColor = C.Negro, spotColor = C.Negro),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(Modifier.fillMaxSize().graphicsLayer { rotationZ = angle.floatValue }, contentAlignment = Alignment.Center) {
+                VinylGrooves(Modifier.fillMaxSize())
+                Box(Modifier.fillMaxSize(0.37f).clip(CircleShape).background(C.Rojo), contentAlignment = Alignment.Center) {
+                    if (art != null) {
+                        Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    } else {
+                        Image(painterResource(R.drawable.telon), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        Column(Modifier.fillMaxSize()) {
+                            Spacer(Modifier.weight(1f))
+                            Text("Stalker", style = Titulo.copy(fontSize = 18.sp, color = C.SobreRojo, textAlign = TextAlign.Center), modifier = Modifier.fillMaxWidth())
+                            Spacer(Modifier.weight(0.6f))
+                            Image(
+                                painterResource(R.drawable.zigzag), null,
+                                Modifier.fillMaxWidth().weight(0.9f), contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(C.Negro))
+                }
+            }
+            // Brillo fijo (no gira), como la luz de la sala sobre el disco.
+            Canvas(Modifier.fillMaxSize()) {
+                val r = size.minDimension / 2f
+                drawCircle(
+                    brush = Brush.sweepGradient(
+                        0f to Color.Transparent,
+                        0.06f to C.Rojo.copy(alpha = 0.5f),
+                        0.16f to Color.Transparent,
+                        0.55f to Color.Transparent,
+                        0.62f to Color.White.copy(alpha = 0.10f),
+                        0.70f to Color.Transparent,
+                        1f to Color.Transparent,
+                        center = Offset(size.width / 2f, size.height / 2f)
+                    ),
+                    radius = r * 0.69f,
+                    style = Stroke(width = r * 0.62f)
+                )
+                drawCircle(C.Negro, r * 0.385f, style = Stroke(width = 3f))
+            }
+        }
+        Tonearm(arm.floatValue, Modifier.fillMaxSize())
+    }
+}
+
+/** Brazo metálico con su cápsula; [down] va de 0 (en reposo) a 1 (sobre el disco). */
+@Composable
+fun Tonearm(down: Float, modifier: Modifier) {
+    Canvas(modifier) {
+        val w = size.width
+        val pivot = Offset(w * 0.965f, w * 0.06f)
+        val len = w * 0.56f
+        val deg = 2f + 16f * down
+        val metal = Brush.linearGradient(listOf(Color(0xFFE9E2D6), Color(0xFF9C9488), Color(0xFFD9D1C4)))
+        // Sombra
+        rotate(deg, pivot) {
+            drawLine(Color.Black.copy(alpha = 0.25f), pivot + Offset(6f, 8f), Offset(pivot.x + 6f, pivot.y + len + 8f), strokeWidth = w * 0.022f)
+        }
+        rotate(deg, pivot) {
+            // Base del brazo
+            drawCircle(Color(0xFF2B2826), w * 0.055f, pivot)
+            drawCircle(metal, w * 0.035f, pivot)
+            // Tubo con un quiebre, como el del logo
+            val mid = Offset(pivot.x, pivot.y + len * 0.72f)
+            val end = Offset(pivot.x - w * 0.045f, pivot.y + len)
+            drawLine(metal, pivot, mid, strokeWidth = w * 0.018f, cap = StrokeCap.Round)
+            drawLine(metal, mid, end, strokeWidth = w * 0.018f, cap = StrokeCap.Round)
+            // Cápsula con la franja roja
+            rotate(18f, end) {
+                drawRoundRect(metal, Offset(end.x - w * 0.03f, end.y - w * 0.01f), Size(w * 0.06f, w * 0.085f), CornerRadius(4f, 4f))
+                drawRect(C.Rojo, Offset(end.x - w * 0.03f, end.y + w * 0.055f), Size(w * 0.06f, w * 0.012f))
+            }
         }
     }
 }

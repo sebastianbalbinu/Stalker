@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items as rowItems
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -83,6 +85,7 @@ fun LibraryScreen(
     val favs by Engine.favorites.collectAsState()
     val discos by Engine.discos.collectAsState()
     val scanned by Engine.scanned.collectAsState()
+    val lastPlayed by Engine.albumLastPlayed.collectAsState()
     val current by vm.current.collectAsState()
 
     var tab by rememberSaveable { mutableStateOf("Álbumes") }
@@ -99,6 +102,9 @@ fun LibraryScreen(
     val songs = remember(tracks) { tracks.sortedBy { it.title.lowercase() } }
 
     val shownAlbums = albums.filter { matches(query, it.title, it.artist) }
+    val recent = remember(albums, lastPlayed) {
+        albums.filter { it.id in lastPlayed }.sortedByDescending { lastPlayed[it.id] ?: 0L }.take(10)
+    }
     val shownFavs = albums.filter { it.id in favs && matches(query, it.title, it.artist) }
     val shownSongs = songs.filter { matches(query, it.title, it.artist, it.album) }
     val shownDiscos = discos.filter { matches(query, it.name) }
@@ -170,6 +176,11 @@ fun LibraryScreen(
                             verticalArrangement = Arrangement.spacedBy(20.dp),
                             contentPadding = PaddingValues(bottom = bottom),
                         ) {
+                            if (tab == "Álbumes" && query.isBlank() && recent.isNotEmpty()) {
+                                item(span = { GridItemSpan(2) }, key = "recientes") {
+                                    RecentRow(recent) { onOpen(Detail.OfAlbum(it.id)) }
+                                }
+                            }
                             items(list, key = { it.id }) { a ->
                                 AlbumCard(
                                     a, favorite = a.id in favs,
@@ -218,6 +229,8 @@ fun LibraryScreen(
         ActionSheet(
             a.title, a.artist,
             listOf(
+                SheetAction("Reproducir después", Ico.PlayNext) { vm.playNext(a.tracks) },
+                SheetAction("Añadir a la cola", Ico.QueueAdd) { vm.addToQueue(a.tracks) },
                 SheetAction(if (fav) "Quitar de favoritos" else "Añadir a favoritos", if (fav) Ico.HeartFull else Ico.Heart) { Engine.toggleFavorite(a.id) },
                 SheetAction("Añadir a un disco", Ico.Disc) { addToDisco = a.tracks.map { it.id } },
                 SheetAction("Ocultar de la biblioteca", Ico.Hide, destructive = true) { Engine.hideAlbum(a.id) },
@@ -229,6 +242,8 @@ fun LibraryScreen(
         ActionSheet(
             t.title, t.artist,
             listOf(
+                SheetAction("Reproducir después", Ico.PlayNext) { vm.playNext(listOf(t)) },
+                SheetAction("Añadir a la cola", Ico.QueueAdd) { vm.addToQueue(listOf(t)) },
                 SheetAction("Añadir a un disco", Ico.Disc) { addToDisco = listOf(t.id) },
                 SheetAction("Ocultar canción", Ico.Hide, destructive = true) { Engine.hideTrack(t.id) },
             ),
@@ -254,7 +269,7 @@ fun AlbumCard(a: Album, favorite: Boolean, onClick: () -> Unit, onLong: () -> Un
     ) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(1f)
-                .shadow(8.dp, RoundedCornerShape(12.dp), ambientColor = C.Carbon, spotColor = C.Carbon)
+                .shadow(8.dp, RoundedCornerShape(12.dp), ambientColor = C.Negro, spotColor = C.Negro)
         ) {
             Cover(a.tracks.first(), Modifier.fillMaxSize())
             if (favorite) {
@@ -282,7 +297,7 @@ fun SleeveCard(cover: Track?, title: String, subtitle: String, onClick: () -> Un
         Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
             Box(
                 Modifier.align(Alignment.CenterEnd).fillMaxHeight(0.86f).aspectRatio(1f)
-                    .clip(CircleShape).background(C.Carbon),
+                    .clip(CircleShape).background(C.Negro),
                 contentAlignment = Alignment.Center
             ) {
                 VinylGrooves(Modifier.fillMaxSize())
@@ -290,7 +305,7 @@ fun SleeveCard(cover: Track?, title: String, subtitle: String, onClick: () -> Un
             }
             Box(
                 Modifier.align(Alignment.CenterStart).fillMaxHeight(0.86f).aspectRatio(1f)
-                    .shadow(10.dp, RoundedCornerShape(6.dp), ambientColor = C.Carbon, spotColor = C.Carbon)
+                    .shadow(10.dp, RoundedCornerShape(6.dp), ambientColor = C.Negro, spotColor = C.Negro)
             ) {
                 Cover(cover, Modifier.fillMaxSize(), corner = 6.dp)
             }
@@ -311,7 +326,7 @@ fun NewDiscoCard(onClick: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             Box(Modifier.size(52.dp).clip(CircleShape).background(C.Rojo), contentAlignment = Alignment.Center) {
-                Icon(Ico.Plus, null, tint = C.Marfil, modifier = Modifier.size(26.dp))
+                Icon(Ico.Plus, null, tint = C.SobreRojo, modifier = Modifier.size(26.dp))
             }
         }
         Column {
@@ -394,7 +409,7 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
         }
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.Bottom) {
-            Box(Modifier.size(132.dp).shadow(10.dp, RoundedCornerShape(12.dp), ambientColor = C.Carbon, spotColor = C.Carbon)) {
+            Box(Modifier.size(132.dp).shadow(10.dp, RoundedCornerShape(12.dp), ambientColor = C.Negro, spotColor = C.Negro)) {
                 Cover(tracks.firstOrNull(), Modifier.fillMaxSize())
             }
             Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -411,9 +426,9 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
                     .clickable(enabled = tracks.isNotEmpty()) { vm.playList(tracks, 0, title) },
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center
             ) {
-                Icon(Ico.Play, null, tint = C.Marfil, modifier = Modifier.size(18.dp))
+                Icon(Ico.Play, null, tint = C.SobreRojo, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Poner el disco", style = Cuerpo.copy(color = C.Marfil, fontWeight = FontWeight.Medium))
+                Text("Poner el disco", style = Cuerpo.copy(color = C.SobreRojo, fontWeight = FontWeight.Medium))
             }
             Row(
                 Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(24.dp)).background(C.Arena)
@@ -475,7 +490,11 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
     }
 
     if (menu) {
-        val actions = if (disco != null) listOf(
+        val queueActions = listOf(
+            SheetAction("Reproducir después", Ico.PlayNext) { vm.playNext(tracks) },
+            SheetAction("Añadir a la cola", Ico.QueueAdd) { vm.addToQueue(tracks) },
+        )
+        val actions = queueActions + if (disco != null) listOf(
             SheetAction("Añadir canciones", Ico.Plus) { onOpen(Detail.PickSongs(disco.id)) },
             SheetAction("Cambiar nombre", Ico.Pencil) { renaming = true },
             SheetAction("Eliminar disco", Ico.Trash, destructive = true) { Engine.deleteDisco(disco.id) },
@@ -486,7 +505,11 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
         ActionSheet(title, artist, actions, onDismiss = { menu = false })
     }
     songMenu?.let { t ->
-        val actions = if (disco != null) listOf(
+        val queueActions = listOf(
+            SheetAction("Reproducir después", Ico.PlayNext) { vm.playNext(listOf(t)) },
+            SheetAction("Añadir a la cola", Ico.QueueAdd) { vm.addToQueue(listOf(t)) },
+        )
+        val actions = queueActions + if (disco != null) listOf(
             SheetAction("Quitar de este disco", Ico.Close, destructive = true) {
                 Engine.setDiscoTracks(disco.id, disco.trackIds.filter { it != t.id })
             },
@@ -537,7 +560,7 @@ fun PickSongsScreen(discoId: Long, onDone: () -> Unit) {
                     .clickable { Engine.setDiscoTracks(disco.id, selected.toList()); onDone() }
                     .padding(horizontal = 18.dp),
                 contentAlignment = Alignment.Center
-            ) { Text("Listo", style = Cuerpo.copy(color = C.Marfil, fontWeight = FontWeight.SemiBold)) }
+            ) { Text("Listo", style = Cuerpo.copy(color = C.SobreRojo, fontWeight = FontWeight.SemiBold)) }
         }
         Spacer(Modifier.height(14.dp))
         OutlinedTextField(
@@ -574,10 +597,31 @@ fun PickSongsScreen(discoId: Long, onDone: () -> Unit) {
                         Modifier.size(26.dp).clip(CircleShape).background(if (on) C.Rojo else C.Arena),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (on) Icon(Ico.Check, "Elegida", tint = C.Marfil, modifier = Modifier.size(16.dp))
+                        if (on) Icon(Ico.Check, "Elegida", tint = C.SobreRojo, modifier = Modifier.size(16.dp))
                     }
                 }
             }
         }
+    }
+}
+
+/** "Volver a escuchar": los discos que sonaron hace poco. */
+@Composable
+fun RecentRow(albums: List<Album>, onOpen: (Album) -> Unit) {
+    Column {
+        Text("VOLVER A ESCUCHAR", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+        Spacer(Modifier.height(10.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            rowItems(albums, key = { "r" + it.id }) { a ->
+                Column(Modifier.width(108.dp).clickable { onOpen(a) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.size(108.dp).shadow(6.dp, RoundedCornerShape(10.dp), ambientColor = C.Negro, spotColor = C.Negro)) {
+                        Cover(a.tracks.first(), Modifier.fillMaxSize(), corner = 10.dp)
+                    }
+                    Text(a.title, style = Cuerpo.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text("TODOS LOS ÁLBUMES", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
     }
 }

@@ -31,6 +31,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -143,7 +146,7 @@ fun AddToDiscoSheet(trackIds: List<Long>, onDismiss: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(C.Rojo), contentAlignment = Alignment.Center) {
-                    Icon(Ico.Plus, null, tint = C.Marfil, modifier = Modifier.size(20.dp))
+                    Icon(Ico.Plus, null, tint = C.SobreRojo, modifier = Modifier.size(20.dp))
                 }
                 Spacer(Modifier.width(14.dp))
                 Text("Nuevo disco", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold, color = C.Rojo))
@@ -174,7 +177,7 @@ fun AddToDiscoSheet(trackIds: List<Long>, onDismiss: () -> Unit) {
 
 /** Lista de pistas del disco que suena, separada en Lado A y Lado B. */
 @Composable
-fun QueueSheet(title: String?, queue: List<Track>, index: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+fun QueueSheet(title: String?, queue: List<Track>, index: Int, onPick: (Int) -> Unit, onRemove: (Int) -> Unit, onDismiss: () -> Unit) {
     val half = (queue.size + 1) / 2
     StalkerSheet(onDismiss) {
         Text(title ?: "En el tocadiscos", style = Titulo.copy(fontSize = 24.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -209,6 +212,12 @@ fun QueueSheet(title: String?, queue: List<Track>, index: Int, onPick: (Int) -> 
                         Text(t.artist, style = Secundario.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Text(fmtTime(t.durationMs), style = Secundario.copy(fontSize = 12.sp))
+                    if (!on) {
+                        Box(
+                            Modifier.padding(start = 6.dp).size(36.dp).clip(CircleShape).clickable { onRemove(i) },
+                            contentAlignment = Alignment.Center
+                        ) { Icon(Ico.Close, "Quitar de la cola", tint = C.Tierra, modifier = Modifier.size(16.dp)) }
+                    }
                 }
             }
         }
@@ -252,3 +261,192 @@ private fun HiddenRow(title: String, sub: String, onShow: () -> Unit) {
     }
 }
 
+
+// ---------- Temporizador para dormir ----------
+
+@Composable
+fun TimerSheet(onDismiss: () -> Unit) {
+    val at by Engine.sleepAt.collectAsState()
+    val endDisco by Engine.sleepEndOfDisco.collectAsState()
+    val now by produceState(System.currentTimeMillis()) {
+        while (true) {
+            value = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+    StalkerSheet(onDismiss) {
+        Text("Temporizador", style = Titulo.copy(fontSize = 24.sp))
+        val left = at?.let { ((it - now) / 1000).coerceAtLeast(0) }
+        Text(
+            when {
+                left != null -> "La música se apaga en ${left / 60}:${"%02d".format(left % 60)}, con un desvanecido suave"
+                endDisco -> "La música se apaga al terminar el disco"
+                else -> "Apaga la música sola, ideal para dormir"
+            },
+            style = Secundario
+        )
+        Spacer(Modifier.height(14.dp))
+        listOf(15, 30, 45, 60, 90).chunked(3).forEach { row ->
+            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { m ->
+                    Pill("$m min", selected = false, modifier = Modifier.weight(1f)) {
+                        Engine.sleepEndOfDisco.value = false
+                        Engine.sleepAt.value = System.currentTimeMillis() + m * 60_000L
+                        onDismiss()
+                    }
+                }
+                if (row.size < 3) Spacer(Modifier.weight((3 - row.size).toFloat()))
+            }
+        }
+        Pill("Al terminar el disco", selected = endDisco, modifier = Modifier.fillMaxWidth()) {
+            Engine.sleepAt.value = null
+            Engine.sleepEndOfDisco.value = true
+            onDismiss()
+        }
+        if (at != null || endDisco) {
+            Spacer(Modifier.height(8.dp))
+            Pill("Apagar temporizador", selected = true, modifier = Modifier.fillMaxWidth()) {
+                Engine.sleepAt.value = null
+                Engine.sleepEndOfDisco.value = false
+                onDismiss()
+            }
+        }
+    }
+}
+
+// ---------- Letra ----------
+
+data class LyricLine(val ms: Long, val text: String)
+
+private val stamp = Regex("""\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
+
+/** Devuelve las líneas y si vienen sincronizadas (formato LRC). */
+fun parseLyrics(raw: String): Pair<List<LyricLine>, Boolean> {
+    val synced = ArrayList<LyricLine>()
+    val plain = ArrayList<LyricLine>()
+    raw.replace("\r", "").split("\n").forEach { line ->
+        val stamps = stamp.findAll(line).toList()
+        val text = line.replace(stamp, "").trim()
+        if (stamps.isEmpty()) {
+            if (!line.trim().matches(Regex("""\[[a-zA-Z]+:.*]"""))) plain.add(LyricLine(0, line.trim()))
+        } else {
+            stamps.forEach { m ->
+                val min = m.groupValues[1].toLong()
+                val sec = m.groupValues[2].toLong()
+                val frac = m.groupValues[3]
+                val ms = when (frac.length) {
+                    0 -> 0L
+                    1 -> frac.toLong() * 100
+                    2 -> frac.toLong() * 10
+                    else -> frac.take(3).toLong()
+                }
+                synced.add(LyricLine(min * 60_000 + sec * 1000 + ms, text))
+            }
+        }
+    }
+    return if (synced.isNotEmpty()) Pair(synced.sortedBy { it.ms }, true) else Pair(plain, false)
+}
+
+@Composable
+fun LyricsSheet(tags: Map<String, String>, posMs: Long, title: String?, onSeek: (Long) -> Unit, onDismiss: () -> Unit) {
+    val raw = tags["LYRICS"] ?: tags["SYNCEDLYRICS"] ?: tags["UNSYNCEDLYRICS"] ?: tags["UNSYNCED LYRICS"]
+    val parsed = remember(raw) { raw?.let { parseLyrics(it) } }
+    val listState = rememberLazyListState()
+    val lines = parsed?.first ?: emptyList()
+    val synced = parsed?.second == true
+    val current = if (synced) lines.indexOfLast { it.ms <= posMs + 300 } else -1
+    LaunchedEffect(current) {
+        if (current >= 0) listState.animateScrollToItem((current - 2).coerceAtLeast(0))
+    }
+    StalkerSheet(onDismiss) {
+        Text(title ?: "Letra", style = Titulo.copy(fontSize = 24.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(if (synced) "Sincronizada · toca una línea para ir ahí" else "Letra", style = Secundario)
+        Spacer(Modifier.height(10.dp))
+        if (lines.isEmpty()) {
+            Text(
+                "Este archivo no trae letra. Puedes incrustarla en tus FLAC con MusicBrainz Picard o Mp3tag (campo LYRICS, en formato LRC si la quieres sincronizada).",
+                style = Cuerpo.copy(color = C.Tierra, lineHeight = 22.sp),
+                modifier = Modifier.padding(vertical = 20.dp)
+            )
+        } else {
+            LazyColumn(Modifier.heightIn(max = 560.dp), state = listState, contentPadding = PaddingValues(bottom = 40.dp)) {
+                itemsIndexed(lines) { i, l ->
+                    val on = i == current
+                    Text(
+                        l.text.ifBlank { "♪" },
+                        style = Titulo.copy(
+                            fontSize = if (synced) 22.sp else 18.sp,
+                            lineHeight = if (synced) 30.sp else 26.sp,
+                            color = when {
+                                !synced -> C.Carbon
+                                on -> C.Rojo
+                                i < current -> C.Piedra
+                                else -> C.Carbon
+                            }
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                            .then(if (synced) Modifier.clickable { onSeek(l.ms) } else Modifier)
+                            .padding(vertical = 6.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ---------- Estadísticas ----------
+
+@Composable
+fun StatsSheet(onDismiss: () -> Unit) {
+    val all by Engine.tracks.collectAsState()
+    val counts by Engine.playCounts.collectAsState()
+    val listened by Engine.listenedMs.collectAsState()
+    val byId = remember(all) { all.associateBy { it.id } }
+    val topTracks = remember(counts, byId) {
+        counts.entries.sortedByDescending { it.value }.mapNotNull { e -> byId[e.key]?.let { it to e.value } }.take(5)
+    }
+    val topAlbums = remember(counts, byId) {
+        counts.entries.mapNotNull { e -> byId[e.key]?.let { it to e.value } }
+            .groupBy { it.first.albumId }
+            .map { (_, list) -> list.first().first to list.sumOf { it.second } }
+            .sortedByDescending { it.second }.take(5)
+    }
+    StalkerSheet(onDismiss) {
+        Text("Tus estadísticas", style = Titulo.copy(fontSize = 24.sp))
+        val h = listened / 3_600_000
+        val m = (listened / 60_000) % 60
+        Text("Has escuchado ${h} h ${m} min en Stalker", style = Secundario)
+        Spacer(Modifier.height(14.dp))
+        LazyColumn(Modifier.heightIn(max = 560.dp)) {
+            item {
+                Text("DISCOS MÁS ESCUCHADOS", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+                Spacer(Modifier.height(8.dp))
+            }
+            if (topAlbums.isEmpty()) item { Text("Aún no hay datos. Escucha un rato y vuelve.", style = Cuerpo.copy(color = C.Tierra)) }
+            itemsIndexed(topAlbums) { i, (t, n) ->
+                StatRow(i + 1, t, t.album, t.artist, n)
+            }
+            item {
+                Spacer(Modifier.height(16.dp))
+                Text("CANCIONES MÁS ESCUCHADAS", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+                Spacer(Modifier.height(8.dp))
+            }
+            itemsIndexed(topTracks) { i, (t, n) ->
+                StatRow(i + 1, t, t.title, t.artist, n)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatRow(pos: Int, t: Track, title: String, sub: String, n: Int) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("$pos", style = Titulo.copy(fontSize = 20.sp, color = C.Rojo), modifier = Modifier.width(28.dp))
+        Cover(t, Modifier.size(44.dp), corner = 8.dp)
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Text(title, style = Cuerpo.copy(fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(sub, style = Secundario.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(if (n == 1) "1 vez" else "$n veces", style = Secundario.copy(fontSize = 12.sp))
+    }
+}
