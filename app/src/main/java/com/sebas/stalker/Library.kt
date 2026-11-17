@@ -37,10 +37,19 @@ object Library {
             MediaStore.Audio.Media.MIME_TYPE,
             MediaStore.Audio.Media.YEAR,
         )
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.MIME_TYPE} LIKE '%flac%'"
+        val pathCol = if (Build.VERSION.SDK_INT >= 29) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
+        val projection2 = projection + pathCol
+        val selection = buildString {
+            append("(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.MIME_TYPE} LIKE '%flac%')")
+            append(" AND ${MediaStore.Audio.Media.IS_RINGTONE} = 0")
+            append(" AND ${MediaStore.Audio.Media.IS_NOTIFICATION} = 0")
+            append(" AND ${MediaStore.Audio.Media.IS_ALARM} = 0")
+            append(" AND ${MediaStore.Audio.Media.IS_PODCAST} = 0")
+            if (Build.VERSION.SDK_INT >= 31) append(" AND ${MediaStore.Audio.Media.IS_RECORDING} = 0")
+        }
         val out = ArrayList<Track>()
         try {
-            context.contentResolver.query(collection, projection, selection, null, null)?.use { c ->
+            context.contentResolver.query(collection, projection2, selection, null, null)?.use { c ->
                 val iId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                 val iTitle = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
                 val iArtist = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -50,8 +59,13 @@ object Library {
                 val iDur = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val iMime = c.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
                 val iYear = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
+                val iPath = c.getColumnIndexOrThrow(pathCol)
                 while (c.moveToNext()) {
                     val id = c.getLong(iId)
+                    val path = c.getString(iPath).orEmpty()
+                    val mime = c.getString(iMime).orEmpty()
+                    val dur = c.getLong(iDur)
+                    if (!looksLikeMusic(path, mime, dur)) continue
                     val artist = c.getString(iArtist)
                     out.add(
                         Track(
@@ -62,8 +76,8 @@ object Library {
                             album = c.getString(iAlbum) ?: "Sin álbum",
                             albumId = c.getLong(iAlbumId),
                             trackNo = c.getInt(iTrack) % 1000,
-                            durationMs = c.getLong(iDur),
-                            mime = c.getString(iMime) ?: "",
+                            durationMs = dur,
+                            mime = mime,
                             year = c.getInt(iYear),
                         )
                     )
@@ -73,6 +87,25 @@ object Library {
             // Sin permiso o error del sistema: biblioteca vacía.
         }
         out
+    }
+
+    /** Carpetas que casi nunca son música: notas de voz, grabaciones, tonos. */
+    private val noMusicFolders = listOf(
+        "whatsapp", "telegram", "signal", "messenger", "instagram",
+        "recordings", "recorder", "grabacion", "grabación", "voice notes", "voicenotes", "voice recorder",
+        "callrecord", "call_rec", "call recordings", "llamadas",
+        "ringtones", "notifications", "alarms", "podcasts", "audiobooks", "miui/sound_recorder",
+        "android/data", "android/media", "dcim", "movies",
+    )
+
+    private fun looksLikeMusic(path: String, mime: String, durationMs: Long): Boolean {
+        val p = path.lowercase()
+        if (noMusicFolders.any { p.contains(it) }) return false
+        val lossless = mime.contains("flac", true) || mime.contains("alac", true) || mime.contains("wav", true)
+        if (mime.contains("opus", true) || mime.contains("amr", true) || mime.contains("3gpp", true)) return false
+        // Clips muy cortos (menos de 40 s) casi siempre son audios o efectos.
+        if (!lossless && durationMs in 1 until 40_000) return false
+        return true
     }
 
     /** Lee formato real: para FLAC, del encabezado STREAMINFO; para otros, con MediaExtractor. */

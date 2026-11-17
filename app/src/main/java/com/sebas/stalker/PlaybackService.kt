@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class PlaybackService : MediaSessionService() {
@@ -70,7 +71,12 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         player.addListener(object : Player.Listener {
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = reapply()
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                reapply()
+                saveSession()
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) = saveSession()
         })
 
         val open = PendingIntent.getActivity(
@@ -98,10 +104,31 @@ class PlaybackService : MediaSessionService() {
         getSystemService(AudioManager::class.java)
             .registerAudioDeviceCallback(deviceCallback, Handler(Looper.getMainLooper()))
 
+        // Reanudar donde quedó la última vez (sin empezar a sonar).
+        scope.launch {
+            Engine.tracks.first { it.isNotEmpty() }
+            restoreSession()
+        }
+
         scope.launch {
             combine(Engine.outputMode, Engine.eqEnabled, Engine.eqPreset) { _, _, _ -> }
                 .collect { reapply() }
         }
+    }
+
+    private fun saveSession() {
+        if (!::player.isInitialized || player.mediaItemCount == 0) return
+        val ids = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
+        Engine.saveSession(ids, player.currentMediaItemIndex, player.currentPosition)
+    }
+
+    private fun restoreSession() {
+        if (player.mediaItemCount > 0) return
+        val (ids, index, pos) = Engine.savedSession() ?: return
+        val items = ids.mapNotNull { id -> Engine.track(id)?.let { Engine.mediaItem(it) } }
+        if (items.isEmpty()) return
+        player.setMediaItems(items, index.coerceIn(0, items.size - 1), pos)
+        player.prepare()
     }
 
     private fun reapply() {
@@ -152,6 +179,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        saveSession()
         scope.cancel()
         try {
             getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(deviceCallback)

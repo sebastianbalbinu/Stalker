@@ -29,6 +29,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,7 +53,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.sebas.stalker.Album
 import com.sebas.stalker.ArtCache
 import com.sebas.stalker.Engine
 import com.sebas.stalker.PlayerViewModel
@@ -60,38 +62,46 @@ import com.sebas.stalker.Track
 @Composable
 fun StalkerApp(vm: PlayerViewModel, hasPermission: Boolean, onRequestPermission: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(1) }
-    var album by remember { mutableStateOf<Album?>(null) }
+    val stack = remember { mutableStateListOf<Detail>() }
     val current by vm.current.collectAsState()
     val playing by vm.isPlaying.collectAsState()
+    val detail = stack.lastOrNull()
 
-    BackHandler(enabled = album != null || tab != 1) {
-        if (album != null) album = null else tab = 1
+    BackHandler(enabled = detail != null || tab != 1) {
+        if (stack.isNotEmpty()) stack.removeAt(stack.size - 1) else tab = 1
     }
 
     Box(Modifier.fillMaxSize().background(C.Marfil)) {
-        Crossfade(targetState = tab, label = "tab") { t ->
-            when (t) {
+        Crossfade(targetState = if (tab == 1) detail ?: tab else tab, label = "pantalla") { s ->
+            when (s) {
+                is Detail.PickSongs -> PickSongsScreen(s.discoId, onDone = { if (stack.isNotEmpty()) stack.removeAt(stack.size - 1) })
+                is Detail -> CollectionScreen(
+                    s, vm,
+                    onBack = { if (stack.isNotEmpty()) stack.removeAt(stack.size - 1) },
+                    onOpen = { stack.add(it) }
+                )
                 0 -> PlayerScreen(vm, onClose = { tab = 1 })
-                1 -> {
-                    val a = album
-                    if (a != null) AlbumScreen(a, vm, onBack = { album = null })
-                    else LibraryScreen(vm, hasPermission, onRequestPermission, onOpenAlbum = { album = it })
-                }
+                1 -> LibraryScreen(vm, hasPermission, onRequestPermission, onOpen = { stack.add(it) })
                 2 -> EqScreen()
                 else -> SystemScreen(vm)
             }
         }
 
-        Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            val t = current
-            if (t != null && tab != 0) {
-                MiniPlayer(t, playing, onOpen = { tab = 0 }, onToggle = { vm.toggle() })
+        if (detail !is Detail.PickSongs || tab != 1) {
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                val t = current
+                if (t != null && tab != 0) {
+                    MiniPlayer(t, playing, onOpen = { tab = 0 }, onToggle = { vm.toggle() })
+                }
+                NavBar(tab) {
+                    if (it == 1 && tab == 1) stack.clear()
+                    tab = it
+                }
             }
-            NavBar(tab) { tab = it; if (it != 1) album = null }
         }
     }
 }
@@ -110,9 +120,11 @@ fun SoftButton(
     tint: Color = C.Carbon,
     onClick: () -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
     Box(
         Modifier.size(size).shadow(4.dp, CircleShape, ambientColor = C.Carbon.copy(alpha = 0.15f), spotColor = C.Carbon.copy(alpha = 0.15f))
-            .clip(CircleShape).background(C.Tarjeta).clickable(onClick = onClick),
+            .clip(CircleShape).background(C.Tarjeta)
+            .clickable { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick() },
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = desc, tint = tint, modifier = Modifier.size(size * 0.42f))

@@ -23,6 +23,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val durationMs = MutableStateFlow(0L)
     val shuffle = MutableStateFlow(false)
     val repeat = MutableStateFlow(Player.REPEAT_MODE_OFF)
+    val queue = MutableStateFlow<List<Track>>(emptyList())
+    val index = MutableStateFlow(0)
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = sync(player)
@@ -64,10 +66,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         current.value = Engine.track(p.currentMediaItem?.mediaId)
         shuffle.value = p.shuffleModeEnabled
         repeat.value = p.repeatMode
+        queue.value = (0 until p.mediaItemCount).mapNotNull { Engine.track(p.getMediaItemAt(it).mediaId) }
+        index.value = p.currentMediaItemIndex
     }
 
-    fun playList(tracks: List<Track>, index: Int, shuffled: Boolean = false) {
+    fun playList(tracks: List<Track>, index: Int, title: String? = null, shuffled: Boolean = false) {
         val c = controller ?: return
+        if (tracks.isEmpty()) return
+        Engine.setQueueTitle(title)
         val items: List<MediaItem> = tracks.map { Engine.mediaItem(it) }
         c.shuffleModeEnabled = shuffled
         c.setMediaItems(items, if (shuffled) 0 else index, 0L)
@@ -91,6 +97,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun seek(ms: Long) { controller?.seekTo(ms) }
+
+    fun jumpTo(i: Int) {
+        val c = controller ?: return
+        c.seekTo(i, 0L)
+        c.play()
+    }
 
     fun toggleShuffle() {
         val c = controller ?: return

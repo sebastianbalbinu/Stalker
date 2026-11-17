@@ -6,6 +6,8 @@ import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class Track(
     val id: Long,
@@ -26,6 +28,13 @@ data class Album(
     val artist: String,
     val year: Int,
     val tracks: List<Track>,
+)
+
+/** Disco armado por el usuario. */
+data class Disco(
+    val id: Long,
+    val name: String,
+    val trackIds: List<Long>,
 )
 
 data class AudioInfo(
@@ -63,6 +72,14 @@ object Engine {
 
     val theme = MutableStateFlow("Telón")
 
+    val favorites = MutableStateFlow<Set<Long>>(emptySet())      // álbumes favoritos
+    val hiddenAlbums = MutableStateFlow<Set<Long>>(emptySet())
+    val hiddenTracks = MutableStateFlow<Set<Long>>(emptySet())
+    val discos = MutableStateFlow<List<Disco>>(emptyList())
+
+    /** Nombre del disco/álbum que está sonando. */
+    val queueTitle = MutableStateFlow<String?>(null)
+
     private var prefs: SharedPreferences? = null
 
     val presets: Map<String, List<Int>> = linkedMapOf(
@@ -84,7 +101,44 @@ object Engine {
         eqEnabled.value = p.getBoolean("eqOn", false)
         eqPreset.value = p.getString("eqPreset", "Plano") ?: "Plano"
         theme.value = p.getString("theme", "Telón") ?: "Telón"
+        favorites.value = readIds(p.getString("favorites", ""))
+        hiddenAlbums.value = readIds(p.getString("hiddenAlbums", ""))
+        hiddenTracks.value = readIds(p.getString("hiddenTracks", ""))
+        discos.value = readDiscos(p.getString("discos", "[]") ?: "[]")
+        queueTitle.value = p.getString("queueTitle", null)
     }
+
+    private fun readIds(s: String?): Set<Long> =
+        s.orEmpty().split(',').mapNotNull { it.trim().toLongOrNull() }.toSet()
+
+    private fun writeIds(key: String, ids: Collection<Long>) {
+        prefs?.edit()?.putString(key, ids.joinToString(","))?.apply()
+    }
+
+    private fun readDiscos(s: String): List<Disco> = try {
+        val arr = JSONArray(s)
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            val ids = o.optJSONArray("tracks") ?: JSONArray()
+            Disco(o.getLong("id"), o.getString("name"), (0 until ids.length()).map { ids.getLong(it) })
+        }
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    private fun saveDiscos() {
+        val arr = JSONArray()
+        discos.value.forEach { d ->
+            arr.put(JSONObject().apply {
+                put("id", d.id)
+                put("name", d.name)
+                put("tracks", JSONArray().apply { d.trackIds.forEach { put(it) } })
+            })
+        }
+        prefs?.edit()?.putString("discos", arr.toString())?.apply()
+    }
+
+    // ---------- Ajustes ----------
 
     fun setMode(m: OutputMode) {
         outputMode.value = m
@@ -105,6 +159,70 @@ object Engine {
         theme.value = name
         prefs?.edit()?.putString("theme", name)?.apply()
     }
+
+    fun setQueueTitle(t: String?) {
+        queueTitle.value = t
+        prefs?.edit()?.putString("queueTitle", t)?.apply()
+    }
+
+    // ---------- Favoritos y ocultos ----------
+
+    fun toggleFavorite(albumId: Long) {
+        val s = favorites.value.toMutableSet()
+        if (!s.add(albumId)) s.remove(albumId)
+        favorites.value = s
+        writeIds("favorites", s)
+    }
+
+    fun hideAlbum(albumId: Long, hide: Boolean = true) {
+        val s = hiddenAlbums.value.toMutableSet()
+        if (hide) s.add(albumId) else s.remove(albumId)
+        hiddenAlbums.value = s
+        writeIds("hiddenAlbums", s)
+    }
+
+    fun hideTrack(trackId: Long, hide: Boolean = true) {
+        val s = hiddenTracks.value.toMutableSet()
+        if (hide) s.add(trackId) else s.remove(trackId)
+        hiddenTracks.value = s
+        writeIds("hiddenTracks", s)
+    }
+
+    fun visible(all: List<Track>, hAlbums: Set<Long>, hTracks: Set<Long>): List<Track> =
+        all.filter { it.albumId !in hAlbums && it.id !in hTracks }
+
+    // ---------- Mis discos ----------
+
+    fun createDisco(name: String, firstTracks: List<Long> = emptyList()): Disco {
+        val d = Disco(System.currentTimeMillis(), name.ifBlank { "Disco sin nombre" }, firstTracks.distinct())
+        discos.value = discos.value + d
+        saveDiscos()
+        return d
+    }
+
+    fun renameDisco(id: Long, name: String) {
+        discos.value = discos.value.map { if (it.id == id) it.copy(name = name.ifBlank { it.name }) else it }
+        saveDiscos()
+    }
+
+    fun deleteDisco(id: Long) {
+        discos.value = discos.value.filter { it.id != id }
+        saveDiscos()
+    }
+
+    fun setDiscoTracks(id: Long, ids: List<Long>) {
+        discos.value = discos.value.map { if (it.id == id) it.copy(trackIds = ids.distinct()) else it }
+        saveDiscos()
+    }
+
+    fun addToDisco(id: Long, ids: List<Long>) {
+        discos.value = discos.value.map { if (it.id == id) it.copy(trackIds = (it.trackIds + ids).distinct()) else it }
+        saveDiscos()
+    }
+
+    fun discoTracks(d: Disco): List<Track> = d.trackIds.mapNotNull { byId[it.toString()] }
+
+    // ---------- Biblioteca ----------
 
     fun setTracks(list: List<Track>) {
         byId = list.associateBy { it.id.toString() }
@@ -135,4 +253,21 @@ object Engine {
                     .build()
             )
             .build()
+
+    // ---------- Reanudar donde quedó ----------
+
+    fun saveSession(ids: List<String>, index: Int, positionMs: Long) {
+        prefs?.edit()
+            ?.putString("queue", ids.joinToString(","))
+            ?.putInt("queueIndex", index)
+            ?.putLong("queuePos", positionMs)
+            ?.apply()
+    }
+
+    fun savedSession(): Triple<List<String>, Int, Long>? {
+        val p = prefs ?: return null
+        val ids = p.getString("queue", "").orEmpty().split(',').filter { it.isNotBlank() }
+        if (ids.isEmpty()) return null
+        return Triple(ids, p.getInt("queueIndex", 0), p.getLong("queuePos", 0L))
+    }
 }

@@ -29,6 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +48,9 @@ fun SystemScreen(vm: PlayerViewModel) {
     val usb by Engine.usbDevice.collectAsState()
     val theme by Engine.theme.collectAsState()
     val tracks by Engine.tracks.collectAsState()
+    val hAlbums by Engine.hiddenAlbums.collectAsState()
+    val hTracks by Engine.hiddenTracks.collectAsState()
+    var showHidden by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     val version = remember {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "1.0"
@@ -131,8 +136,20 @@ fun SystemScreen(vm: PlayerViewModel) {
                     Icon(Ico.Refresh, null, tint = C.Carbon, modifier = Modifier.size(22.dp))
                     Column(Modifier.weight(1f).padding(start = 14.dp)) {
                         Text("Biblioteca", style = Cuerpo.copy(fontWeight = FontWeight.Medium))
-                        Text("${tracks.size} canciones · toca para volver a escanear", style = Secundario.copy(fontSize = 12.sp))
+                        Text("${tracks.size} canciones · sin audios de WhatsApp ni grabaciones · toca para escanear", style = Secundario.copy(fontSize = 12.sp))
                     }
+                }
+                HorizontalDivider(color = C.Arena, thickness = 1.dp)
+                Row(
+                    Modifier.fillMaxWidth().clickable { showHidden = true }.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Ico.Hide, null, tint = C.Carbon, modifier = Modifier.size(22.dp))
+                    Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                        Text("Ocultos", style = Cuerpo.copy(fontWeight = FontWeight.Medium))
+                        Text("${hAlbums.size} álbumes · ${hTracks.size} canciones", style = Secundario.copy(fontSize = 12.sp))
+                    }
+                    Icon(Ico.Right, null, tint = C.Tierra, modifier = Modifier.size(16.dp))
                 }
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -145,5 +162,6 @@ fun SystemScreen(vm: PlayerViewModel) {
             }
         }
     }
+    if (showHidden) HiddenSheet { showHidden = false }
 }
 

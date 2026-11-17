@@ -24,7 +24,18 @@ jobs:
           gradle-version: "8.9"
 
       - name: Compilar
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          gradle assembleRelease --no-daemon 2>&1 | tee build-log.txt
+
+      - name: Publicar registro si falla
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: log-${{ github.run_number }}
+          name: Registro de error ${{ github.run_number }}
+          prerelease: true
+          files: build-log.txt
 
       - name: Renombrar APK
         run: cp app/build/outputs/apk/release/app-release.apk Stalker.apk
