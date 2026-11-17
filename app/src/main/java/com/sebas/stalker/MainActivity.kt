@@ -76,6 +76,12 @@ class MainActivity : ComponentActivity() {
         launcher.launch(perms.toTypedArray())
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Al volver a la app, revisa si hay música nueva.
+        if (Engine.scanned.value && granted()) vm.rescan()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)

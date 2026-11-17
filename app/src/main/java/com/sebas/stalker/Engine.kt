@@ -98,6 +98,13 @@ object Engine {
     val albumLastPlayed = MutableStateFlow<Map<Long, Long>>(emptyMap())
     val listenedMs = MutableStateFlow(0L)
 
+    /** Descargas hechas desde la tienda (ids del DownloadManager). */
+    val downloads = MutableStateFlow<Set<Long>>(emptySet())
+    /** Descargas .zip que se están descomprimiendo ahora. */
+    val extracting = MutableStateFlow<Set<Long>>(emptySet())
+    /** Última página abierta en la tienda. */
+    val lastStoreUrl = MutableStateFlow<String?>(null)
+
     /** Posición guardada de archivos largos (mezclas, audiolibros). */
     private var positions: MutableMap<Long, Long> = mutableMapOf()
 
@@ -133,6 +140,30 @@ object Engine {
         albumLastPlayed.value = readLongMap(p.getString("albumLast", "{}"))
         positions = readLongMap(p.getString("positions", "{}")).toMutableMap()
         listenedMs.value = p.getLong("listenedMs", 0L)
+        downloads.value = readIds(p.getString("downloads", ""))
+        lastStoreUrl.value = p.getString("storeUrl", null)
+    }
+
+    @Synchronized
+    fun addDownload(id: Long) {
+        downloads.value = downloads.value + id
+        writeIds("downloads", downloads.value)
+    }
+
+    @Synchronized
+    fun removeDownload(id: Long) {
+        downloads.value = downloads.value - id
+        writeIds("downloads", downloads.value)
+    }
+
+    @Synchronized
+    fun setExtracting(id: Long, on: Boolean) {
+        extracting.value = if (on) extracting.value + id else extracting.value - id
+    }
+
+    fun setStoreUrl(url: String?) {
+        lastStoreUrl.value = url
+        prefs?.edit()?.putString("storeUrl", url)?.apply()
     }
 
     private fun readLongMap(s: String?): Map<Long, Long> = try {

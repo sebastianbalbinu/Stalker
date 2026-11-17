@@ -2,6 +2,11 @@ package com.sebas.stalker
 
 import android.app.Application
 import android.content.ComponentName
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
+import kotlinx.coroutines.Job
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
@@ -30,8 +35,25 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         override fun onEvents(player: Player, events: Player.Events) = sync(player)
     }
 
+    /** Importación automática: cuando Android registra música nueva o borrada, la biblioteca se actualiza sola. */
+    private var rescanJob: Job? = null
+    private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            if (!Engine.scanned.value) return
+            rescanJob?.cancel()
+            rescanJob = viewModelScope.launch {
+                delay(2500)
+                rescan()
+            }
+        }
+    }
+
     init {
         Engine.init(app)
+        try {
+            app.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observer)
+        } catch (e: Exception) {
+        }
         viewModelScope.launch {
             try {
                 val token = SessionToken(app, ComponentName(app, PlaybackService::class.java))
@@ -144,6 +166,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        try { getApplication<Application>().contentResolver.unregisterContentObserver(observer) } catch (e: Exception) { }
         controller?.removeListener(listener)
         controller?.release()
         controller = null

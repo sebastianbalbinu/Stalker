@@ -38,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -45,7 +46,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -72,6 +72,8 @@ fun StalkerApp(
     val current by vm.current.collectAsState()
     val playing by vm.isPlaying.collectAsState()
     val detail = stack.lastOrNull()
+    val ctx = LocalContext.current
+    val browser = remember { BrowserState(ctx) }
 
     BackHandler(enabled = detail != null || tab != 1) {
         if (stack.isNotEmpty()) stack.removeAt(stack.size - 1) else tab = 1
@@ -89,6 +91,7 @@ fun StalkerApp(
                 0 -> PlayerScreen(vm, onClose = { tab = 1 })
                 1 -> LibraryScreen(vm, hasPermission, onRequestPermission, onOpen = { stack.add(it) })
                 2 -> EqScreen()
+                4 -> StoreScreen(browser, if (current != null) 180.dp else 96.dp)
                 else -> SystemScreen(vm, onExport, onImport)
             }
         }
@@ -230,25 +233,26 @@ fun MiniPlayer(t: Track, playing: Boolean, onOpen: () -> Unit, onToggle: () -> U
 @Composable
 fun NavBar(tab: Int, onTab: (Int) -> Unit) {
     val items = listOf(
-        Ico.Play to "Reproduciendo",
-        Ico.Library to "Biblioteca",
-        Ico.Sliders to "Ecualizador",
-        Ico.Gear to "Sistema",
+        Triple(0, Ico.Play, "Reproduciendo"),
+        Triple(1, Ico.Library, "Biblioteca"),
+        Triple(4, Ico.Bag, "Tienda"),
+        Triple(2, Ico.Sliders, "Ecualizador"),
+        Triple(3, Ico.Gear, "Sistema"),
     )
     Row(
         Modifier.fillMaxWidth().height(68.dp)
             .shadow(8.dp, RoundedCornerShape(24.dp), ambientColor = C.Negro.copy(alpha = 0.2f), spotColor = C.Negro.copy(alpha = 0.2f))
             .clip(RoundedCornerShape(24.dp)).background(C.Tarjeta)
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        items.forEachIndexed { i, (icon, label) ->
-            val on = i == tab
+        items.forEach { (id, icon, label) ->
+            val on = id == tab
             Box(
-                Modifier.weight(1f).padding(horizontal = 6.dp).height(46.dp)
+                Modifier.weight(1f).padding(horizontal = 4.dp).height(46.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(if (on) C.Rojo else Color.Transparent)
-                    .clickable { onTab(i) },
+                    .clickable { onTab(id) },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, label, tint = if (on) C.SobreRojo else C.Carbon, modifier = Modifier.size(23.dp))
