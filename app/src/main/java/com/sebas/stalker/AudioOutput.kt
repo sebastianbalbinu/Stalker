@@ -40,7 +40,7 @@ class AudioOutput(context: Context) {
             try {
                 val d = am.getAudioDevicesForAttributes(mediaAttributes()).firstOrNull()
                 type = d?.type
-                name = d?.name
+                name = null
             } catch (e: Exception) {
             }
         }
