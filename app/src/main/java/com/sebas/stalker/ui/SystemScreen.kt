@@ -61,7 +61,7 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
 
     CurtainSheet {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 190.dp)) {
-            Text("Sistema", style = Titulo)
+            ScreenHeader("Sistema")
             Spacer(Modifier.height(18.dp))
 
             Card {
@@ -75,7 +75,7 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
             }
 
             Spacer(Modifier.height(18.dp))
-            Text("Salida de audio", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
+            Text("SALIDA DE AUDIO", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             Card {
                 OutputMode.values().forEachIndexed { i, m ->
@@ -101,7 +101,7 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
             }
 
             Spacer(Modifier.height(18.dp))
-            Text("Volumen parejo (ReplayGain)", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
+            Text("VOLUMEN PAREJO (REPLAYGAIN)", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(4.dp))
             Text("Iguala el volumen entre discos usando las etiquetas del FLAC. No actúa en Bit-perfect.", style = Secundario.copy(fontSize = 12.sp))
             Spacer(Modifier.height(10.dp))
@@ -112,7 +112,7 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
             }
 
             Spacer(Modifier.height(18.dp))
-            Text("Apariencia", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
+            Text("APARIENCIA", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Claro", "Noche", "Sistema").forEach { m ->
@@ -146,6 +146,11 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
                     }
                 }
             }
+
+            Spacer(Modifier.height(18.dp))
+            Text("ALMACENAMIENTO", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Spacer(Modifier.height(10.dp))
+            StorageCard(tracks)
 
             Spacer(Modifier.height(18.dp))
             Card {
@@ -205,5 +210,72 @@ private fun SettingRow(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
             Text(sub, style = Secundario.copy(fontSize = 12.sp))
         }
         Icon(Ico.Right, null, tint = C.Tierra, modifier = Modifier.size(16.dp))
+    }
+}
+
+fun fmtBytes(b: Long): String = when {
+    b >= 1_073_741_824L -> "%.1f GB".format(b / 1_073_741_824.0)
+    b >= 1_048_576L -> "%.0f MB".format(b / 1_048_576.0)
+    else -> "%.0f KB".format(b / 1024.0)
+}
+
+private fun codecOf(mime: String): String = when {
+    mime.contains("flac", true) -> "FLAC"
+    mime.contains("mpeg", true) -> "MP3"
+    mime.contains("mp4", true) || mime.contains("aac", true) || mime.contains("alac", true) -> "AAC / ALAC"
+    mime.contains("wav", true) -> "WAV"
+    mime.contains("ogg", true) || mime.contains("opus", true) -> "OGG"
+    else -> "Otros"
+}
+
+/** Cuánto pesa tu música, por formato, y cuánto espacio libre queda en el teléfono. */
+@Composable
+private fun StorageCard(tracks: List<com.sebas.stalker.Track>) {
+    val total = remember(tracks) { tracks.sumOf { it.sizeBytes } }
+    val byCodec = remember(tracks) {
+        tracks.groupBy { codecOf(it.mime) }
+            .map { (k, v) -> Triple(k, v.sumOf { it.sizeBytes }, v.size) }
+            .sortedByDescending { it.second }
+    }
+    val (free, capacity) = remember(tracks) {
+        try {
+            val st = android.os.StatFs(android.os.Environment.getExternalStorageDirectory().path)
+            Pair(st.availableBytes, st.totalBytes)
+        } catch (e: Exception) {
+            Pair(0L, 0L)
+        }
+    }
+    val palette = listOf(C.Rojo, C.RojoOscuro, C.Piedra, C.Tierra, C.Linea, C.Arena)
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(fmtBytes(total), style = Titulo.copy(fontSize = 30.sp))
+                Spacer(Modifier.size(8.dp))
+                Text("de música · ${tracks.size} canciones", style = Secundario, modifier = Modifier.padding(bottom = 5.dp))
+            }
+            if (total > 0) {
+                Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(C.Arena)) {
+                    byCodec.forEachIndexed { i, (_, bytes, _) ->
+                        val f = (bytes.toFloat() / total).coerceAtLeast(0.001f)
+                        Box(Modifier.weight(f).fillMaxSize().background(palette[i % palette.size]))
+                    }
+                }
+                byCodec.forEachIndexed { i, (name, bytes, n) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(10.dp).clip(CircleShape).background(palette[i % palette.size]))
+                        Text(name, style = Cuerpo.copy(fontSize = 14.sp), modifier = Modifier.padding(start = 10.dp).weight(1f))
+                        Text("${fmtBytes(bytes)} · $n", style = Secundario.copy(fontSize = 12.sp))
+                    }
+                }
+            }
+            if (capacity > 0) {
+                HorizontalDivider(color = C.Arena, thickness = 1.dp)
+                val pct = (total.toDouble() / capacity * 100)
+                Text(
+                    "Tu música ocupa ${"%.1f".format(pct)} % del teléfono · quedan ${fmtBytes(free)} libres de ${fmtBytes(capacity)}",
+                    style = Secundario.copy(fontSize = 12.sp)
+                )
+            }
+        }
     }
 }

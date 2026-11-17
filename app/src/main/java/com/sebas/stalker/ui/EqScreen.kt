@@ -42,8 +42,7 @@ fun EqScreen() {
 
     CurtainSheet {
       Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 120.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Ecualizador", style = Titulo, modifier = Modifier.weight(1f))
+        ScreenHeader("Ecualizador", trailing = {
             Switch(
                 checked = on,
                 onCheckedChange = { Engine.setEq(it) },
@@ -55,7 +54,7 @@ fun EqScreen() {
                     uncheckedBorderColor = C.Piedra,
                 )
             )
-        }
+        })
         Spacer(Modifier.height(8.dp))
         Text(
             when {
@@ -64,7 +63,8 @@ fun EqScreen() {
                 on -> "Activo · preset $preset"
                 else -> "Apagado · la señal pasa sin cambios"
             },
-            style = Secundario
+            style = Secundario.copy(textAlign = TextAlign.Center),
+            modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(22.dp))
 
@@ -98,7 +98,7 @@ fun EqScreen() {
         }
 
         Spacer(Modifier.height(26.dp))
-        Text("Presets", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
+        Text("PRESETS", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(10.dp))
         Engine.presets.keys.toList().chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

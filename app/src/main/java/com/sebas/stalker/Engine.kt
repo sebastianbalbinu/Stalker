@@ -20,6 +20,7 @@ data class Track(
     val durationMs: Long,
     val mime: String,
     val year: Int,
+    val sizeBytes: Long = 0L,
 )
 
 data class Album(
@@ -64,6 +65,9 @@ object Engine {
     val outputMode = MutableStateFlow(OutputMode.BIT_PERFECT)
     val outputStatus = MutableStateFlow("Sin reproducir")
     val usbDevice = MutableStateFlow<String?>(null)
+    /** Por dónde sale el audio: "usb", "bluetooth", "cable" o "parlante". */
+    val route = MutableStateFlow("parlante")
+    val routeName = MutableStateFlow<String?>(null)
     val currentInfo = MutableStateFlow<AudioInfo?>(null)
 
     val eqEnabled = MutableStateFlow(false)

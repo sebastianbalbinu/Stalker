@@ -263,12 +263,13 @@ private fun StoreHome(browser: BrowserState, bottomPadding: androidx.compose.ui.
     val focus = LocalFocusManager.current
     CurtainSheet {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = bottomPadding + 24.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Tienda", style = Titulo, modifier = Modifier.weight(1f))
-                DownloadsButton(active, onDownloads)
-            }
+            ScreenHeader("Tienda", trailing = { DownloadsButton(active, onDownloads) })
             Spacer(Modifier.height(6.dp))
-            Text("Busca y descarga música mientras sigue sonando la tuya. Lo que bajes aparece solo en tu biblioteca.", style = Secundario)
+            Text(
+                "Busca y descarga música mientras sigue sonando la tuya. Lo que bajes aparece solo en tu biblioteca.",
+                style = Secundario.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+                modifier = Modifier.fillMaxWidth()
+            )
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = query,

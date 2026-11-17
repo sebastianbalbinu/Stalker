@@ -3,6 +3,10 @@ package com.sebas.stalker.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Image
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -117,7 +121,57 @@ fun StalkerApp(
 
 // ---------- Componentes compartidos ----------
 
-val Titulo: TextStyle get() = TextStyle(fontFamily = Playfair, fontSize = 40.sp, color = C.Carbon, lineHeight = 44.sp)
+/** Encabezado centrado, con botones opcionales a los lados. */
+@Composable
+fun ScreenHeader(
+    title: String,
+    leading: (@Composable () -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Box(Modifier.fillMaxWidth().height(48.dp)) {
+        if (leading != null) Box(Modifier.align(Alignment.CenterStart)) { leading() }
+        Text(
+            title,
+            style = Titulo.copy(fontSize = 26.sp, textAlign = TextAlign.Center),
+            modifier = Modifier.align(Alignment.Center).padding(horizontal = 60.dp),
+            maxLines = 1
+        )
+        if (trailing != null) Box(Modifier.align(Alignment.CenterEnd)) { trailing() }
+    }
+}
+
+/** El logo de texto: ondas de sonido sobre STALKER espaciado, como en el ícono. */
+@Composable
+fun Wordmark(modifier: Modifier = Modifier, color: Color = C.Carbon, scale: Float = 1f) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Canvas(Modifier.size(width = (22 * scale).dp, height = (16 * scale).dp)) {
+            val bars = listOf(0.35f, 0.65f, 1f, 0.65f, 0.35f)
+            val gap = size.width / (bars.size - 1)
+            bars.forEachIndexed { i, h ->
+                val x = gap * i
+                val bh = size.height * h
+                drawLine(
+                    if (i == 2) C.Rojo else color, Offset(x, (size.height - bh) / 2f), Offset(x, (size.height + bh) / 2f),
+                    strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round
+                )
+            }
+        }
+        Spacer(Modifier.height((4 * scale).dp))
+        Text(
+            "STALKER",
+            style = TextStyle(
+                fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = (15 * scale).sp,
+                letterSpacing = (6 * scale).sp, color = color
+            ),
+            modifier = Modifier.padding(start = (6 * scale).dp)
+        )
+    }
+}
+
+val Titulo: TextStyle get() = TextStyle(
+    fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 32.sp,
+    color = C.Carbon, lineHeight = 38.sp, letterSpacing = (-0.5).sp
+)
 val Cuerpo: TextStyle get() = TextStyle(fontFamily = Inter, fontSize = 15.sp, color = C.Carbon)
 val Secundario: TextStyle get() = TextStyle(fontFamily = Inter, fontSize = 13.sp, color = C.Tierra)
 

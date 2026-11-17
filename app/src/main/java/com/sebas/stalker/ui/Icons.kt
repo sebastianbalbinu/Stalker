@@ -84,5 +84,6 @@ object Ico {
     val QueueAdd = build("queueAdd", "M4 6h12M4 11h12M4 16h7 M18 13v6M15 16h6" to true)
     val Volume = build("volume", "M4 9h4l5-4v14l-5-4H4z M16.5 8.5a5 5 0 0 1 0 7" to true)
     val Bag = build("bag", "M5 8h14l-1.2 12H6.2z M9 8V6.5a3 3 0 0 1 6 0V8" to true)
+    val Bluetooth = build("bt", "M7 7l10 10-5 4V3l5 4L7 17" to true)
     val Layers = build("layers", "M12 3l9 5-9 5-9-5z M3 12l9 5 9-5M3 16l9 5 9-5" to true)
 }

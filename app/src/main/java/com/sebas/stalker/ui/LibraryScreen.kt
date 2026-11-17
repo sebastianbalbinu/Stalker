@@ -110,15 +110,16 @@ fun LibraryScreen(
     val shownDiscos = discos.filter { matches(query, it.name) }
 
     CurtainSheet {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Biblioteca", style = Titulo, modifier = Modifier.weight(1f))
-            SoftButton(if (searching) Ico.Close else Ico.Search, if (searching) "Cerrar búsqueda" else "Buscar") {
-                searching = !searching
-                if (!searching) query = ""
-            }
-            Spacer(Modifier.width(10.dp))
-            SoftButton(Ico.Refresh, "Volver a escanear") { vm.rescan() }
-        }
+        ScreenHeader(
+            "Biblioteca",
+            leading = {
+                SoftButton(if (searching) Ico.Close else Ico.Search, if (searching) "Cerrar búsqueda" else "Buscar") {
+                    searching = !searching
+                    if (!searching) query = ""
+                }
+            },
+            trailing = { SoftButton(Ico.Refresh, "Volver a escanear") { vm.rescan() } },
+        )
         if (searching) {
             Spacer(Modifier.height(14.dp))
             OutlinedTextField(
@@ -140,7 +141,10 @@ fun LibraryScreen(
             )
         }
         Spacer(Modifier.height(16.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+        ) {
             listOf("Álbumes", "Mis discos", "Favoritos", "Canciones").forEach { l ->
                 Pill(l, selected = tab == l) { tab = l }
             }

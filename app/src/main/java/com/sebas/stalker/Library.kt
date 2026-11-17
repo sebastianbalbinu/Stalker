@@ -36,12 +36,13 @@ object Library {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.MIME_TYPE,
             MediaStore.Audio.Media.YEAR,
+            MediaStore.Audio.Media.SIZE,
         )
         val pathCol = if (Build.VERSION.SDK_INT >= 29) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
         val projection2 = projection + pathCol
         val selection = buildString {
-            append("(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.MIME_TYPE} LIKE '%flac%')")
-            append(" AND ${MediaStore.Audio.Media.IS_RINGTONE} = 0")
+            // Todo el audio del teléfono (cualquier carpeta, también la tarjeta SD), menos tonos y grabaciones.
+            append("${MediaStore.Audio.Media.IS_RINGTONE} = 0")
             append(" AND ${MediaStore.Audio.Media.IS_NOTIFICATION} = 0")
             append(" AND ${MediaStore.Audio.Media.IS_ALARM} = 0")
             append(" AND ${MediaStore.Audio.Media.IS_PODCAST} = 0")
@@ -60,6 +61,7 @@ object Library {
                 val iMime = c.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
                 val iYear = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
                 val iPath = c.getColumnIndexOrThrow(pathCol)
+                val iSize = c.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
                 while (c.moveToNext()) {
                     val id = c.getLong(iId)
                     val path = c.getString(iPath).orEmpty()
@@ -79,6 +81,7 @@ object Library {
                             durationMs = dur,
                             mime = mime,
                             year = c.getInt(iYear),
+                            sizeBytes = c.getLong(iSize),
                         )
                     )
                 }
@@ -95,7 +98,7 @@ object Library {
         "recordings", "recorder", "grabacion", "grabación", "voice notes", "voicenotes", "voice recorder",
         "callrecord", "call_rec", "call recordings", "llamadas",
         "ringtones", "notifications", "alarms", "podcasts", "audiobooks", "miui/sound_recorder",
-        "android/data", "android/media", "dcim", "movies",
+        "android/media",
     )
 
     private fun looksLikeMusic(path: String, mime: String, durationMs: Long): Boolean {

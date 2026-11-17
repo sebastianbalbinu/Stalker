@@ -24,9 +24,53 @@ class AudioOutput(context: Context) {
             it.type == AudioDeviceInfo.TYPE_USB_HEADSET || it.type == AudioDeviceInfo.TYPE_USB_DEVICE
         }
 
+    private val btTypes = setOf(
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_HEARING_AID, 26 /* BLE_HEADSET */, 27 /* BLE_SPEAKER */, 30 /* BLE_BROADCAST */,
+    )
+    private val wiredTypes = setOf(
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_LINE_ANALOG,
+    )
+
+    /** Averigua por dónde está saliendo realmente la música. */
+    fun detectRoute() {
+        var type: Int? = null
+        var name: String? = null
+        if (Build.VERSION.SDK_INT >= 33) {
+            try {
+                val d = am.getAudioDevicesForAttributes(mediaAttributes()).firstOrNull()
+                type = d?.type
+                name = d?.name
+            } catch (e: Exception) {
+            }
+        }
+        val outs = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        if (type == null) {
+            val pick = outs.firstOrNull { it.type == AudioDeviceInfo.TYPE_USB_HEADSET || it.type == AudioDeviceInfo.TYPE_USB_DEVICE }
+                ?: outs.firstOrNull { it.type in btTypes }
+                ?: outs.firstOrNull { it.type in wiredTypes }
+            type = pick?.type
+            name = pick?.productName?.toString()
+        } else if (name.isNullOrBlank()) {
+            name = outs.firstOrNull { it.type == type }?.productName?.toString()
+        }
+        Engine.route.value = when (type) {
+            AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_DEVICE -> "usb"
+            in btTypes -> "bluetooth"
+            in wiredTypes -> "cable"
+            else -> "parlante"
+        }
+        Engine.routeName.value = name?.takeIf { it.isNotBlank() }
+    }
+
     fun apply(mode: OutputMode, info: AudioInfo?) {
+        detectRoute()
         val dev = usbDevice()
         Engine.usbDevice.value = dev?.productName?.toString()
+        if (Engine.route.value == "bluetooth") {
+            Engine.outputStatus.value = "Bluetooth · el audio se comprime, no llega en calidad FLAC"
+            return
+        }
         if (dev == null) {
             Engine.outputStatus.value = "Sin DAC USB · salida del teléfono"
             return
