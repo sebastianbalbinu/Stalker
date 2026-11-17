@@ -3,6 +3,7 @@ name: Compilar APK
 on:
   push:
     branches: [main]
+    paths-ignore: ['docs/**', 'README.md']
   workflow_dispatch:
 
 permissions:
@@ -23,7 +24,15 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Preparar llave de firma
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then echo "$KEYSTORE_B64" | base64 -d > app/release.keystore; fi
+
       - name: Compilar
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           set -o pipefail
           gradle assembleRelease --no-daemon 2>&1 | tee build-log.txt
@@ -48,7 +57,7 @@ jobs:
       - name: Publicar en Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.3.${{ github.run_number }}
-          name: Stalker 1.3.${{ github.run_number }}
+          tag_name: v1.4.${{ github.run_number }}
+          name: Stalker 1.4.${{ github.run_number }}
           body: APK lista para instalar en el celular.
           files: Stalker.apk

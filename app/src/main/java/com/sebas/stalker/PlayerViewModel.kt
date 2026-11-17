@@ -50,6 +50,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         Engine.init(app)
+        viewModelScope.launch { Updates.check(app) }
         try {
             app.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observer)
         } catch (e: Exception) {
@@ -143,6 +144,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun removeFromQueue(i: Int) {
         val c = controller ?: return
         if (i in 0 until c.mediaItemCount && i != c.currentMediaItemIndex) c.removeMediaItem(i)
+    }
+
+    fun checkUpdates() {
+        viewModelScope.launch { Updates.check(getApplication(), force = true) }
+    }
+
+    /** Soltar la aguja en una canción y un punto de ella. */
+    fun dropNeedle(i: Int, ms: Long) {
+        val c = controller ?: return
+        if (i !in 0 until c.mediaItemCount) return
+        c.seekTo(i, ms)
+        c.play()
     }
 
     fun jumpTo(i: Int) {

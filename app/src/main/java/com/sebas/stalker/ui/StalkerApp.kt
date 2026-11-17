@@ -28,6 +28,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -62,6 +67,8 @@ import com.sebas.stalker.Engine
 import com.sebas.stalker.PlayerViewModel
 import com.sebas.stalker.R
 import com.sebas.stalker.Track
+import com.sebas.stalker.UpdateInfo
+import com.sebas.stalker.Updates
 
 @Composable
 fun StalkerApp(
@@ -70,6 +77,7 @@ fun StalkerApp(
     onRequestPermission: () -> Unit,
     onExport: () -> Unit,
     onImport: () -> Unit,
+    onImportDisc: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(1) }
     val stack = remember { mutableStateListOf<Detail>() }
@@ -80,9 +88,31 @@ fun StalkerApp(
     val browser = remember { BrowserState(ctx) }
 
     BackHandler(enabled = detail != null || tab != 1) {
-        if (stack.isNotEmpty()) stack.removeAt(stack.size - 1) else tab = 1
+        when {
+            stack.isNotEmpty() -> stack.removeAt(stack.size - 1)
+            tab == 4 -> tab = 3
+            else -> tab = 1
+        }
     }
 
+    // Reloj de giro compartido por todas las miniaturas de vinilo.
+    val spinSlow = remember { mutableFloatStateOf(0f) }
+    val spinFast = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        var last = 0L
+        while (true) {
+            withFrameNanos { now ->
+                if (last != 0L) {
+                    val dt = (now - last) / 1_000_000_000f
+                    spinSlow.floatValue = (spinSlow.floatValue + dt * 36f) % 360f
+                    spinFast.floatValue = (spinFast.floatValue + dt * 200f) % 360f
+                }
+                last = now
+            }
+        }
+    }
+
+    CompositionLocalProvider(LocalSpin provides Spin(spinSlow, spinFast)) {
     Box(Modifier.fillMaxSize().background(C.Marfil)) {
         Crossfade(targetState = if (tab == 1) detail ?: tab else tab, label = "pantalla") { s ->
             when (s) {
@@ -93,11 +123,25 @@ fun StalkerApp(
                     onOpen = { stack.add(it) }
                 )
                 0 -> PlayerScreen(vm, onClose = { tab = 1 })
-                1 -> LibraryScreen(vm, hasPermission, onRequestPermission, onOpen = { stack.add(it) })
+                1 -> LibraryScreen(vm, hasPermission, onRequestPermission, onOpen = { stack.add(it) }, onImportDisc = onImportDisc)
                 2 -> EqScreen()
-                4 -> StoreScreen(browser, if (current != null) 180.dp else 96.dp)
-                else -> SystemScreen(vm, onExport, onImport)
+                4 -> StoreScreen(browser, if (current != null) 180.dp else 96.dp, onExit = { tab = 3 })
+                else -> SystemScreen(vm, onExport, onImport, onOpenStore = { tab = 4 })
             }
+        }
+
+        val sharingMsg by com.sebas.stalker.Sharing.working.collectAsState()
+        sharingMsg?.let { msg ->
+            Box(
+                Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 12.dp)
+                    .clip(RoundedCornerShape(20.dp)).background(C.Rojo).padding(horizontal = 18.dp, vertical = 10.dp)
+            ) { Text(msg, style = Cuerpo.copy(color = C.SobreRojo, fontSize = 14.sp, fontWeight = FontWeight.Medium)) }
+        }
+
+        val update by Updates.available.collectAsState()
+        val dismissed by Updates.dismissed.collectAsState()
+        update?.let { u ->
+            if (!dismissed) UpdateSheet(u) { Updates.dismissed.value = true }
         }
 
         if (detail !is Detail.PickSongs || tab != 1) {
@@ -110,7 +154,7 @@ fun StalkerApp(
                 if (t != null && tab != 0) {
                     MiniPlayer(t, playing, onOpen = { tab = 0 }, onToggle = { vm.toggle() })
                 }
-                NavBar(tab) {
+                NavBar(if (tab == 4) 3 else tab) {
                     if (it == 1 && tab == 1) stack.clear()
                     tab = it
                 }
@@ -118,8 +162,29 @@ fun StalkerApp(
         }
     }
 }
+}
 
 // ---------- Componentes compartidos ----------
+
+/** Ángulos de giro para las miniaturas: lento (siempre) y a 33⅓ rpm (lo que suena). */
+class Spin(val slow: androidx.compose.runtime.FloatState, val fast: androidx.compose.runtime.FloatState)
+
+val LocalSpin = staticCompositionLocalOf { Spin(mutableFloatStateOf(0f), mutableFloatStateOf(0f)) }
+
+/** Vinilo pequeño que gira, con la carátula (o las rayas) en la etiqueta. */
+@Composable
+fun MiniVinyl(track: Track?, modifier: Modifier, fast: Boolean = false) {
+    val spin = LocalSpin.current
+    Box(
+        modifier.clip(CircleShape).background(C.Negro)
+            .graphicsLayer { rotationZ = if (fast) spin.fast.floatValue else spin.slow.floatValue },
+        contentAlignment = Alignment.Center
+    ) {
+        VinylGrooves(Modifier.fillMaxSize(), 4)
+        Box(Modifier.fillMaxSize(0.4f).clip(CircleShape)) { Cover(track, Modifier.fillMaxSize(), corner = 0.dp) }
+        Box(Modifier.fillMaxSize(0.06f).clip(CircleShape).background(Color(0xFFCFC6B8)))
+    }
+}
 
 /** Encabezado centrado, con botones opcionales a los lados. */
 @Composable
@@ -195,22 +260,15 @@ fun SoftButton(
 }
 
 /** Telón (o el fondo elegido) arriba y hoja marfil redondeada encima, como en el diseño. */
+/** Telón rojo arriba y hoja redondeada encima, como en el diseño. */
 @Composable
 fun CurtainSheet(content: @Composable ColumnScope.() -> Unit) {
-    val theme by Engine.theme.collectAsState()
     Box(Modifier.fillMaxSize().background(C.Negro)) {
-        when (theme) {
-            "Zigzag" -> Image(
-                painterResource(R.drawable.zigzag), null,
-                Modifier.fillMaxWidth().height(170.dp), contentScale = ContentScale.Crop
-            )
-            "Marfil" -> Box(Modifier.fillMaxWidth().height(170.dp).background(C.Arena))
-            else -> Image(
-                painterResource(R.drawable.telon), null,
-                Modifier.fillMaxWidth().height(170.dp), contentScale = ContentScale.Crop,
-                alignment = Alignment.TopCenter
-            )
-        }
+        Image(
+            painterResource(R.drawable.telon), null,
+            Modifier.fillMaxWidth().height(170.dp), contentScale = ContentScale.Crop,
+            alignment = Alignment.TopCenter
+        )
         Column(
             Modifier.fillMaxSize().statusBarsPadding().padding(top = 64.dp)
                 .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
@@ -243,21 +301,10 @@ fun Cover(track: Track?, modifier: Modifier, corner: Dp = 12.dp) {
     }
 }
 
+/** Sin carátula: las rayas en zigzag. */
 @Composable
-fun FallbackArt(variant: Int, modifier: Modifier) {
-    when (variant) {
-        0 -> Box(modifier) {
-            Image(painterResource(R.drawable.telon), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        }
-        1 -> Column(modifier.background(C.Negro)) {
-            Spacer(Modifier.weight(1.1f))
-            Image(painterResource(R.drawable.zigzag), null, Modifier.fillMaxWidth().weight(1f), contentScale = ContentScale.Crop)
-        }
-        else -> Column(modifier) {
-            Image(painterResource(R.drawable.telon), null, Modifier.fillMaxWidth().weight(1.4f), contentScale = ContentScale.Crop)
-            Image(painterResource(R.drawable.zigzag), null, Modifier.fillMaxWidth().weight(1f), contentScale = ContentScale.Crop)
-        }
-    }
+fun FallbackArt(@Suppress("UNUSED_PARAMETER") variant: Int, modifier: Modifier) {
+    Image(painterResource(R.drawable.zigzag), null, modifier, contentScale = ContentScale.Crop)
 }
 
 @Composable
@@ -271,9 +318,7 @@ fun MiniPlayer(t: Track, playing: Boolean, onOpen: () -> Unit, onToggle: () -> U
             .padding(start = 12.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(52.dp).clip(CircleShape).background(Brush.radialGradient(listOf(C.Surco, C.Negro))), contentAlignment = Alignment.Center) {
-            Cover(t, Modifier.size(22.dp), corner = 11.dp)
-        }
+        MiniVinyl(t, Modifier.size(52.dp), fast = playing)
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Text(t.title, style = Cuerpo.copy(color = C.SobreRojo, fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(t.artist, style = Secundario.copy(color = Color(0xFFF0D9D2)), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -289,7 +334,6 @@ fun NavBar(tab: Int, onTab: (Int) -> Unit) {
     val items = listOf(
         Triple(0, Ico.Play, "Reproduciendo"),
         Triple(1, Ico.Library, "Biblioteca"),
-        Triple(4, Ico.Bag, "Tienda"),
         Triple(2, Ico.Sliders, "Ecualizador"),
         Triple(3, Ico.Gear, "Sistema"),
     )
@@ -357,3 +401,34 @@ fun fmtTime(ms: Long): String {
     return "%d:%02d".format(s / 60, s % 60)
 }
 
+
+@Composable
+fun UpdateSheet(u: UpdateInfo, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    StalkerSheet(onDismiss) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(painterResource(R.drawable.logo), null, Modifier.size(72.dp).clip(RoundedCornerShape(18.dp)))
+            Spacer(Modifier.height(14.dp))
+            Text("Hay una versión nueva", style = Titulo.copy(fontSize = 24.sp))
+            Text("STALKER ${u.version}", style = Secundario)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Se instala encima de la que tienes, sin perder tus discos ni tus favoritos.",
+                style = Cuerpo.copy(color = C.Tierra, textAlign = TextAlign.Center)
+            )
+            Spacer(Modifier.height(18.dp))
+            Pill("Descargar ahora", selected = true, modifier = Modifier.fillMaxWidth()) {
+                try {
+                    ctx.startActivity(
+                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u.url))
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                } catch (e: Exception) {
+                }
+                onDismiss()
+            }
+            Spacer(Modifier.height(8.dp))
+            Pill("Más tarde", selected = false, modifier = Modifier.fillMaxWidth(), onClick = onDismiss)
+        }
+    }
+}

@@ -82,6 +82,7 @@ object Library {
                             mime = mime,
                             year = c.getInt(iYear),
                             sizeBytes = c.getLong(iSize),
+                            source = sourceOf(path),
                         )
                     )
                 }
@@ -94,16 +95,30 @@ object Library {
 
     /** Carpetas que casi nunca son música: notas de voz, grabaciones, tonos. */
     private val noMusicFolders = listOf(
-        "whatsapp", "telegram", "signal", "messenger", "instagram",
+        "whatsapp voice notes", "voice notes", "signal", "messenger", "instagram",
         "recordings", "recorder", "grabacion", "grabación", "voice notes", "voicenotes", "voice recorder",
         "callrecord", "call_rec", "call recordings", "llamadas",
         "ringtones", "notifications", "alarms", "podcasts", "audiobooks", "miui/sound_recorder",
-        "android/media",
+        "whatsapp video", "whatsapp animated", "whatsapp stickers",
     )
+
+    /** De qué chat llegó la canción, si llegó por uno. */
+    fun sourceOf(path: String): String? {
+        val p = path.lowercase()
+        return when {
+            p.contains("whatsapp") -> "WhatsApp"
+            p.contains("telegram") -> "Telegram"
+            else -> null
+        }
+    }
 
     private fun looksLikeMusic(path: String, mime: String, durationMs: Long): Boolean {
         val p = path.lowercase()
         if (noMusicFolders.any { p.contains(it) }) return false
+        val shared = sourceOf(path)
+        if (shared != null && !Engine.includeShared.value) return false
+        // Dentro de Android/media solo vale lo que llega como canción o documento por chat.
+        if (p.contains("android/media") && shared == null) return false
         val lossless = mime.contains("flac", true) || mime.contains("alac", true) || mime.contains("wav", true)
         if (mime.contains("opus", true) || mime.contains("amr", true) || mime.contains("3gpp", true)) return false
         // Clips muy cortos (menos de 40 s) casi siempre son audios o efectos.

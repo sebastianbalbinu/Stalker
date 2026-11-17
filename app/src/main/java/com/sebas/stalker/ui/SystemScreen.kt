@@ -42,7 +42,7 @@ import com.sebas.stalker.PlayerViewModel
 import com.sebas.stalker.R
 
 @Composable
-fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit) {
+fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit, onOpenStore: () -> Unit) {
     val mode by Engine.outputMode.collectAsState()
     val status by Engine.outputStatus.collectAsState()
     val usb by Engine.usbDevice.collectAsState()
@@ -52,6 +52,10 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
     val hTracks by Engine.hiddenTracks.collectAsState()
     var showHidden by remember { mutableStateOf(false) }
     var showStats by remember { mutableStateOf(false) }
+    val purist by Engine.purist.collectAsState()
+    val shared by Engine.includeShared.collectAsState()
+    val updateStatus by com.sebas.stalker.Updates.status.collectAsState()
+    val updateAvail by com.sebas.stalker.Updates.available.collectAsState()
     val night by Engine.nightMode.collectAsState()
     val rg by Engine.replayGain.collectAsState()
     val ctx = LocalContext.current
@@ -119,31 +123,18 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
                     Pill(m, selected = night == m, modifier = Modifier.weight(1f)) { Engine.setNight(m) }
                 }
             }
+
+            Spacer(Modifier.height(18.dp))
+            Text("DISCOS", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             Card {
-                Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    listOf("Telón", "Zigzag", "Marfil").forEach { name ->
-                        val sel = name == theme
-                        Column(
-                            Modifier.weight(1f).clickable { Engine.setTheme(name) },
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
-                                Modifier.fillMaxWidth().height(64.dp)
-                                    .border(if (sel) 2.dp else 1.dp, if (sel) C.Rojo else C.Linea, RoundedCornerShape(12.dp))
-                                    .padding(if (sel) 3.dp else 0.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(C.Arena)
-                            ) {
-                                when (name) {
-                                    "Telón" -> Image(painterResource(R.drawable.telon), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                                    "Zigzag" -> Image(painterResource(R.drawable.zigzag), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                                    else -> Box(Modifier.fillMaxSize().background(C.Marfil))
-                                }
-                            }
-                            Text(name, style = Secundario.copy(fontSize = 12.sp, color = if (sel) C.Rojo else C.Tierra, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal))
-                        }
-                    }
+                ToggleRow(Ico.Disc, "Dar vuelta al disco", "Al terminar el Lado A, el disco se detiene para que le des vuelta, como un vinilo de verdad", purist) {
+                    Engine.setPurist(it)
+                }
+                HorizontalDivider(color = C.Arena, thickness = 1.dp)
+                ToggleRow(Ico.Download, "Música de WhatsApp y Telegram", "Incluye las canciones que te mandan por chat (nunca las notas de voz)", shared) {
+                    Engine.setIncludeShared(it)
+                    vm.rescan()
                 }
             }
 
@@ -159,6 +150,8 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
                 SettingRow(Ico.Upload, "Guardar respaldo", "Discos, favoritos, ocultos, estadísticas y ajustes en un archivo") { onExport() }
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
                 SettingRow(Ico.Download, "Restaurar respaldo", "Desde un archivo de Stalker, por ejemplo en otro celular") { onImport() }
+                HorizontalDivider(color = C.Arena, thickness = 1.dp)
+                SettingRow(Ico.Bag, "Conseguir música en FLAC", "Por si no tienes algún disco en buena calidad") { onOpenStore() }
             }
 
             Spacer(Modifier.height(18.dp))
@@ -186,11 +179,15 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
                     Icon(Ico.Right, null, tint = C.Tierra, modifier = Modifier.size(16.dp))
                 }
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
-                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clickable { vm.checkUpdates() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Image(painterResource(R.drawable.logo), null, Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)))
                     Column(Modifier.weight(1f).padding(start = 14.dp)) {
                         Text("Acerca de Stalker", style = Cuerpo.copy(fontWeight = FontWeight.Medium))
                         Text("Versión $version · Media3 · FLAC / WAV / ALAC / MP3", style = Secundario.copy(fontSize = 12.sp))
+                        Text(
+                            updateStatus.ifBlank { "Toca para buscar actualizaciones" },
+                            style = Secundario.copy(fontSize = 12.sp, color = if (updateAvail != null) C.Rojo else C.Tierra)
+                        )
                     }
                 }
             }
@@ -277,5 +274,24 @@ private fun StorageCard(tracks: List<com.sebas.stalker.Track>) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ToggleRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, sub: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onChange(!on) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = C.Carbon, modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+            Text(title, style = Cuerpo.copy(fontWeight = FontWeight.Medium))
+            Text(sub, style = Secundario.copy(fontSize = 12.sp, lineHeight = 16.sp))
+        }
+        androidx.compose.material3.Switch(
+            checked = on,
+            onCheckedChange = onChange,
+            colors = androidx.compose.material3.SwitchDefaults.colors(
+                checkedThumbColor = C.SobreRojo, checkedTrackColor = C.Rojo,
+                uncheckedThumbColor = C.Marfil, uncheckedTrackColor = C.Piedra, uncheckedBorderColor = C.Piedra,
+            )
+        )
     }
 }

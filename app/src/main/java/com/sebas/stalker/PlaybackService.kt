@@ -97,6 +97,15 @@ class PlaybackService : MediaSessionService() {
                     player.pause()
                     Engine.sleepEndOfDisco.value = false
                 }
+                // Modo purista: al terminar el Lado A, el disco se detiene para darle vuelta.
+                val n = player.mediaItemCount
+                if (Engine.purist.value && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && n >= 4 &&
+                    player.currentMediaItemIndex == (n + 1) / 2
+                ) {
+                    player.pause()
+                    Engine.flipPending.value = true
+                }
+                if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) Engine.flipPending.value = false
                 countedFor = null
                 resumeLongFile(reason)
                 reapply()

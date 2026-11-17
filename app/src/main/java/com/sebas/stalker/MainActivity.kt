@@ -1,7 +1,10 @@
 package com.sebas.stalker
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -53,6 +56,37 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val discLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? -> if (uri != null) importDisc(uri) }
+
+    private fun importDisc(uri: Uri) {
+        lifecycleScope.launch {
+            toast(Sharing.importDisc(this@MainActivity, uri))
+            vm.rescan()
+        }
+    }
+
+    /** Si abrieron un disco compartido desde otra app, se importa. */
+    private fun handleIncoming(intent: Intent?) {
+        if (intent == null) return
+        val uri: Uri? = when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            else -> null
+        }
+        if (uri != null) {
+            intent.action = null
+            importDisc(uri)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIncoming(intent)
+    }
+
     private val importLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -92,6 +126,7 @@ class MainActivity : ComponentActivity() {
         } else {
             requestPermissions()
         }
+        handleIncoming(intent)
         setContent {
             val night by Engine.nightMode.collectAsState()
             val system = isSystemInDarkTheme()
@@ -115,6 +150,7 @@ class MainActivity : ComponentActivity() {
                     exportLauncher.launch("stalker-respaldo-$day.json")
                 },
                 onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                onImportDisc = { discLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
             )
         }
     }

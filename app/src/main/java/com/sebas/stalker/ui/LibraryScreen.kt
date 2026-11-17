@@ -59,6 +59,10 @@ import com.sebas.stalker.Album
 import com.sebas.stalker.Disco
 import com.sebas.stalker.Engine
 import com.sebas.stalker.PlayerViewModel
+import com.sebas.stalker.Sharing
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.sebas.stalker.Track
 
 /** A qué pantalla de detalle entró el usuario desde la biblioteca. */
@@ -78,8 +82,12 @@ fun LibraryScreen(
     hasPermission: Boolean,
     onRequestPermission: () -> Unit,
     onOpen: (Detail) -> Unit,
+    onImportDisc: () -> Unit = {},
 ) {
     val all by Engine.tracks.collectAsState()
+    val view by Engine.libraryView.collectAsState()
+    val discView = view == "Discos"
+    val playing by vm.isPlaying.collectAsState()
     val hAlbums by Engine.hiddenAlbums.collectAsState()
     val hTracks by Engine.hiddenTracks.collectAsState()
     val favs by Engine.favorites.collectAsState()
@@ -108,6 +116,9 @@ fun LibraryScreen(
     val shownFavs = albums.filter { it.id in favs && matches(query, it.title, it.artist) }
     val shownSongs = songs.filter { matches(query, it.title, it.artist, it.album) }
     val shownDiscos = discos.filter { matches(query, it.name) }
+    val received = remember(tracks) { tracks.filter { it.source != null }.sortedByDescending { it.id } }
+    val shownReceived = received.filter { matches(query, it.title, it.artist, it.album) }
+    val currentAlbum = current?.albumId
 
     CurtainSheet {
         ScreenHeader(
@@ -118,7 +129,11 @@ fun LibraryScreen(
                     if (!searching) query = ""
                 }
             },
-            trailing = { SoftButton(Ico.Refresh, "Volver a escanear") { vm.rescan() } },
+            trailing = {
+                SoftButton(if (discView) Ico.Library else Ico.Disc, if (discView) "Ver portadas" else "Ver como discos") {
+                    Engine.setLibraryView(if (discView) "Portadas" else "Discos")
+                }
+            },
         )
         if (searching) {
             Spacer(Modifier.height(14.dp))
@@ -145,7 +160,7 @@ fun LibraryScreen(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
         ) {
-            listOf("Álbumes", "Mis discos", "Favoritos", "Canciones").forEach { l ->
+            (listOf("Álbumes", "Mis discos", "Favoritos") + (if (received.isNotEmpty()) listOf("Recibidos") else emptyList()) + "Canciones").forEach { l ->
                 Pill(l, selected = tab == l) { tab = l }
             }
         }
@@ -182,15 +197,25 @@ fun LibraryScreen(
                         ) {
                             if (tab == "Álbumes" && query.isBlank() && recent.isNotEmpty()) {
                                 item(span = { GridItemSpan(2) }, key = "recientes") {
-                                    RecentRow(recent) { onOpen(Detail.OfAlbum(it.id)) }
+                                    RecentRow(recent, discView) { onOpen(Detail.OfAlbum(it.id)) }
                                 }
                             }
                             items(list, key = { it.id }) { a ->
-                                AlbumCard(
-                                    a, favorite = a.id in favs,
-                                    onClick = { onOpen(Detail.OfAlbum(a.id)) },
-                                    onLong = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); albumMenu = a },
-                                )
+                                if (discView) {
+                                    SleeveCard(
+                                        cover = a.tracks.first(), title = a.title, subtitle = a.artist,
+                                        onClick = { onOpen(Detail.OfAlbum(a.id)) },
+                                        onLong = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); albumMenu = a },
+                                        fast = playing && currentAlbum == a.id,
+                                        favorite = a.id in favs,
+                                    )
+                                } else {
+                                    AlbumCard(
+                                        a, favorite = a.id in favs,
+                                        onClick = { onOpen(Detail.OfAlbum(a.id)) },
+                                        onLong = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); albumMenu = a },
+                                    )
+                                }
                             }
                         }
                     }
@@ -203,6 +228,7 @@ fun LibraryScreen(
                     contentPadding = PaddingValues(bottom = bottom),
                 ) {
                     item(span = { GridItemSpan(1) }) { NewDiscoCard { naming = true } }
+                    item(span = { GridItemSpan(1) }) { ImportDiscCard(onImportDisc) }
                     items(shownDiscos, key = { it.id }) { d ->
                         val dt = Engine.discoTracks(d)
                         SleeveCard(
@@ -211,6 +237,24 @@ fun LibraryScreen(
                             subtitle = if (dt.size == 1) "1 canción" else "${dt.size} canciones",
                             onClick = { onOpen(Detail.OfDisco(d.id)) },
                             onLong = null,
+                            fast = playing && Engine.queueTitle.value == d.name,
+                            mine = true,
+                        )
+                    }
+                }
+
+                tab == "Recibidos" -> LazyColumn(contentPadding = PaddingValues(bottom = bottom)) {
+                    item {
+                        Text(
+                            "Canciones que te mandaron por WhatsApp o Telegram. Las notas de voz nunca aparecen aquí.",
+                            style = Secundario.copy(fontSize = 12.sp), modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+                    itemsIndexed(shownReceived, key = { _, t -> "rc" + t.id }) { i, t ->
+                        SongRow(
+                            t, playing = current?.id == t.id, disc = discView,
+                            onClick = { vm.playList(shownReceived, i, "Recibidos") },
+                            onLong = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); songMenu = t },
                         )
                     }
                 }
@@ -218,7 +262,7 @@ fun LibraryScreen(
                 else -> LazyColumn(contentPadding = PaddingValues(bottom = bottom)) {
                     itemsIndexed(shownSongs, key = { _, t -> t.id }) { i, t ->
                         SongRow(
-                            t, playing = current?.id == t.id,
+                            t, playing = current?.id == t.id, disc = discView,
                             onClick = { vm.playList(shownSongs, i, "Canciones") },
                             onLong = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); songMenu = t },
                         )
@@ -290,33 +334,77 @@ fun AlbumCard(a: Album, favorite: Boolean, onClick: () -> Unit, onLong: () -> Un
     }
 }
 
-/** Funda con el vinilo asomando: así se ven los discos propios. */
+/** Funda con el vinilo asomando y girando: así se ve la colección en modo discos. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SleeveCard(cover: Track?, title: String, subtitle: String, onClick: () -> Unit, onLong: (() -> Unit)?) {
+fun SleeveCard(
+    cover: Track?,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    onLong: (() -> Unit)?,
+    fast: Boolean = false,
+    favorite: Boolean = false,
+    mine: Boolean = false,
+) {
     Column(
         Modifier.combinedClickable(onClick = onClick, onLongClick = onLong),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
-            Box(
-                Modifier.align(Alignment.CenterEnd).fillMaxHeight(0.86f).aspectRatio(1f)
-                    .clip(CircleShape).background(C.Negro),
-                contentAlignment = Alignment.Center
-            ) {
-                VinylGrooves(Modifier.fillMaxSize())
-                Box(Modifier.fillMaxSize(0.36f).clip(CircleShape)) { Cover(cover, Modifier.fillMaxSize(), corner = 0.dp) }
-            }
-            Box(
-                Modifier.align(Alignment.CenterStart).fillMaxHeight(0.86f).aspectRatio(1f)
-                    .shadow(10.dp, RoundedCornerShape(6.dp), ambientColor = C.Negro, spotColor = C.Negro)
-            ) {
-                Cover(cover, Modifier.fillMaxSize(), corner = 6.dp)
-            }
-        }
+        Sleeve(cover, Modifier.fillMaxWidth().aspectRatio(1f), fast, favorite, mine)
         Column {
             Text(title, style = Cuerpo.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subtitle, style = Secundario, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** La funda y el vinilo, sin textos. */
+@Composable
+fun Sleeve(cover: Track?, modifier: Modifier, fast: Boolean = false, favorite: Boolean = false, mine: Boolean = false) {
+    Box(modifier) {
+        MiniVinyl(
+            cover,
+            Modifier.align(Alignment.CenterEnd).fillMaxHeight(0.86f).aspectRatio(1f)
+                .shadow(6.dp, CircleShape, ambientColor = C.Negro, spotColor = C.Negro),
+            fast = fast
+        )
+        Box(
+            Modifier.align(Alignment.CenterStart).fillMaxHeight(0.86f).aspectRatio(1f)
+                .shadow(10.dp, RoundedCornerShape(4.dp), ambientColor = C.Negro, spotColor = C.Negro)
+        ) {
+            Cover(cover, Modifier.fillMaxSize(), corner = 4.dp)
+            if (mine) {
+                Box(
+                    Modifier.align(Alignment.BottomStart).padding(6.dp).clip(RoundedCornerShape(6.dp))
+                        .background(C.Rojo).padding(horizontal = 6.dp, vertical = 2.dp)
+                ) { Text("MI DISCO", style = Cuerpo.copy(fontSize = 9.sp, letterSpacing = 1.sp, color = C.SobreRojo, fontWeight = FontWeight.SemiBold)) }
+            }
+            if (favorite) {
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(6.dp).size(24.dp).clip(CircleShape).background(C.Marfil),
+                    contentAlignment = Alignment.Center
+                ) { Icon(Ico.HeartFull, "Favorito", tint = C.Rojo, modifier = Modifier.size(14.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+fun ImportDiscCard(onClick: () -> Unit) {
+    Column(Modifier.clickable(onClick = onClick), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(1f).padding(vertical = 12.dp)
+                .clip(RoundedCornerShape(12.dp)).background(C.Arena),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(Modifier.size(52.dp).clip(CircleShape).background(C.Negro), contentAlignment = Alignment.Center) {
+                Icon(Ico.Download, null, tint = C.SobreRojo, modifier = Modifier.size(24.dp))
+            }
+        }
+        Column {
+            Text("Abrir disco", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
+            Text("Uno que te compartieron", style = Secundario)
         }
     }
 }
@@ -342,18 +430,26 @@ fun NewDiscoCard(onClick: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SongRow(t: Track, playing: Boolean, onClick: () -> Unit, onLong: () -> Unit) {
+fun SongRow(t: Track, playing: Boolean, onClick: () -> Unit, onLong: () -> Unit, disc: Boolean = false) {
     Row(
         Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLong).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Cover(t, Modifier.size(48.dp), corner = 8.dp)
+        if (disc) MiniVinyl(t, Modifier.size(48.dp), fast = playing) else Cover(t, Modifier.size(48.dp), corner = 8.dp)
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Text(
                 t.title, style = Cuerpo.copy(color = if (playing) C.Rojo else C.Carbon, fontWeight = if (playing) FontWeight.SemiBold else FontWeight.Normal),
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
-            Text(t.artist, style = Secundario, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (t.source != null) {
+                    Box(
+                        Modifier.padding(end = 6.dp).clip(RoundedCornerShape(5.dp)).background(C.Arena)
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                    ) { Text(t.source, style = Secundario.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold)) }
+                }
+                Text(t.artist, style = Secundario, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         Text(fmtTime(t.durationMs), style = Secundario.copy(fontSize = 12.sp))
     }
@@ -373,6 +469,12 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
 
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
+    var ordering by remember { mutableStateOf(false) }
+    val view by Engine.libraryView.collectAsState()
+    val playingNow by vm.isPlaying.collectAsState()
+    val queueTitle by Engine.queueTitle.collectAsState()
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     var songMenu by remember { mutableStateOf<Track?>(null) }
     var addToDisco by remember { mutableStateOf<List<Long>?>(null) }
 
@@ -413,8 +515,15 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
         }
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.Bottom) {
-            Box(Modifier.size(132.dp).shadow(10.dp, RoundedCornerShape(12.dp), ambientColor = C.Negro, spotColor = C.Negro)) {
-                Cover(tracks.firstOrNull(), Modifier.fillMaxSize())
+            if (view == "Discos") {
+                Sleeve(
+                    tracks.firstOrNull(), Modifier.size(156.dp),
+                    fast = playingNow && queueTitle == title, mine = disco != null
+                )
+            } else {
+                Box(Modifier.size(132.dp).shadow(10.dp, RoundedCornerShape(12.dp), ambientColor = C.Negro, spotColor = C.Negro)) {
+                    Cover(tracks.firstOrNull(), Modifier.fillMaxSize())
+                }
             }
             Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (disco != null) Text("MI DISCO", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, color = C.Rojo, fontWeight = FontWeight.SemiBold))
@@ -453,14 +562,29 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
             }
         } else {
             val half = (tracks.size + 1) / 2
+            val sideA = tracks.take(half).sumOf { it.durationMs }
+            val sideB = tracks.drop(half).sumOf { it.durationMs }
+            if (ordering && disco != null) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.Arena).padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Usa las flechas para ordenar tu disco", style = Secundario.copy(fontSize = 12.sp), modifier = Modifier.weight(1f))
+                    Pill("Listo", selected = true) { ordering = false }
+                }
+            }
             LazyColumn(contentPadding = PaddingValues(bottom = 200.dp)) {
                 itemsIndexed(tracks, key = { _, t -> t.id }) { i, t ->
                     if (tracks.size >= 4 && (i == 0 || i == half)) {
-                        Text(
-                            if (i == 0) "LADO A" else "LADO B",
-                            style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold),
-                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
-                        )
+                        val side = if (i == 0) sideA else sideB
+                        val long = disco != null && side > 22 * 60_000L
+                        Row(Modifier.padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                (if (i == 0) "LADO A" else "LADO B") + " · " + fmtTime(side),
+                                style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold, color = if (long) C.Rojo else C.Tierra)
+                            )
+                            if (long) Text("  más largo que un LP (22 min)", style = Secundario.copy(fontSize = 11.sp, color = C.Rojo))
+                        }
                     }
                     val on = current?.id == t.id
                     Row(
@@ -485,7 +609,18 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
                             )
                             if (disco != null) Text(t.artist, style = Secundario.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        Text(fmtTime(t.durationMs), style = Secundario.copy(fontSize = 12.sp, color = if (on) C.Rojo else C.Tierra))
+                        if (ordering && disco != null) {
+                            Box(
+                                Modifier.size(40.dp).clip(CircleShape).clickable(enabled = i > 0) { Engine.moveInDisco(disco.id, i, i - 1) },
+                                contentAlignment = Alignment.Center
+                            ) { Icon(Ico.Up, "Subir", tint = if (i > 0) C.Carbon else C.Linea, modifier = Modifier.size(18.dp)) }
+                            Box(
+                                Modifier.size(40.dp).clip(CircleShape).clickable(enabled = i < tracks.size - 1) { Engine.moveInDisco(disco.id, i, i + 1) },
+                                contentAlignment = Alignment.Center
+                            ) { Icon(Ico.Down, "Bajar", tint = if (i < tracks.size - 1) C.Carbon else C.Linea, modifier = Modifier.size(18.dp)) }
+                        } else {
+                            Text(fmtTime(t.durationMs), style = Secundario.copy(fontSize = 12.sp, color = if (on) C.Rojo else C.Tierra))
+                        }
                     }
                     HorizontalDivider(color = C.Linea, thickness = 1.dp)
                 }
@@ -498,7 +633,15 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
             SheetAction("Reproducir después", Ico.PlayNext) { vm.playNext(tracks) },
             SheetAction("Añadir a la cola", Ico.QueueAdd) { vm.addToQueue(tracks) },
         )
-        val actions = queueActions + if (disco != null) listOf(
+        val share = SheetAction("Compartir disco", Ico.Upload) {
+            scope.launch {
+                val uri = Sharing.exportDisc(ctx, title, tracks)
+                if (uri != null) ctx.startActivity(Sharing.shareIntent(uri, title))
+                else android.widget.Toast.makeText(ctx, "No se pudo preparar el disco", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+        val actions = queueActions + share + if (disco != null) listOf(
+            SheetAction("Ordenar canciones", Ico.ListIco) { ordering = true },
             SheetAction("Añadir canciones", Ico.Plus) { onOpen(Detail.PickSongs(disco.id)) },
             SheetAction("Cambiar nombre", Ico.Pencil) { renaming = true },
             SheetAction("Eliminar disco", Ico.Trash, destructive = true) { Engine.deleteDisco(disco.id) },
@@ -611,15 +754,19 @@ fun PickSongsScreen(discoId: Long, onDone: () -> Unit) {
 
 /** "Volver a escuchar": los discos que sonaron hace poco. */
 @Composable
-fun RecentRow(albums: List<Album>, onOpen: (Album) -> Unit) {
+fun RecentRow(albums: List<Album>, disc: Boolean, onOpen: (Album) -> Unit) {
     Column {
         Text("VOLVER A ESCUCHAR", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(10.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             rowItems(albums, key = { "r" + it.id }) { a ->
-                Column(Modifier.width(108.dp).clickable { onOpen(a) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box(Modifier.size(108.dp).shadow(6.dp, RoundedCornerShape(10.dp), ambientColor = C.Negro, spotColor = C.Negro)) {
-                        Cover(a.tracks.first(), Modifier.fillMaxSize(), corner = 10.dp)
+                Column(Modifier.width(if (disc) 132.dp else 108.dp).clickable { onOpen(a) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (disc) {
+                        Sleeve(a.tracks.first(), Modifier.width(132.dp).aspectRatio(1f))
+                    } else {
+                        Box(Modifier.size(108.dp).shadow(6.dp, RoundedCornerShape(10.dp), ambientColor = C.Negro, spotColor = C.Negro)) {
+                            Cover(a.tracks.first(), Modifier.fillMaxSize(), corner = 10.dp)
+                        }
                     }
                     Text(a.title, style = Cuerpo.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }

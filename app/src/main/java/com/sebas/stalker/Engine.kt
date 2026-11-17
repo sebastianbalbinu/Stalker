@@ -21,6 +21,8 @@ data class Track(
     val mime: String,
     val year: Int,
     val sizeBytes: Long = 0L,
+    /** "WhatsApp" o "Telegram" si llegó compartida por un chat. */
+    val source: String? = null,
 )
 
 data class Album(
@@ -102,6 +104,15 @@ object Engine {
     val albumLastPlayed = MutableStateFlow<Map<Long, Long>>(emptyMap())
     val listenedMs = MutableStateFlow(0L)
 
+    /** "Discos" (fundas con vinilo) o "Portadas". */
+    val libraryView = MutableStateFlow("Discos")
+    /** Incluir la música recibida por WhatsApp y Telegram (nunca las notas de voz). */
+    val includeShared = MutableStateFlow(true)
+    /** Modo purista: al terminar el Lado A, el disco se detiene para darle vuelta. */
+    val purist = MutableStateFlow(false)
+    /** El Lado A terminó y espera que le den vuelta. */
+    val flipPending = MutableStateFlow(false)
+
     /** Descargas hechas desde la tienda (ids del DownloadManager). */
     val downloads = MutableStateFlow<Set<Long>>(emptySet())
     /** Descargas .zip que se están descomprimiendo ahora. */
@@ -145,6 +156,9 @@ object Engine {
         positions = readLongMap(p.getString("positions", "{}")).toMutableMap()
         listenedMs.value = p.getLong("listenedMs", 0L)
         downloads.value = readIds(p.getString("downloads", ""))
+        libraryView.value = p.getString("libraryView", "Discos") ?: "Discos"
+        includeShared.value = p.getBoolean("includeShared", true)
+        purist.value = p.getBoolean("purist", false)
         lastStoreUrl.value = p.getString("storeUrl", null)
     }
 
@@ -163,6 +177,29 @@ object Engine {
     @Synchronized
     fun setExtracting(id: Long, on: Boolean) {
         extracting.value = if (on) extracting.value + id else extracting.value - id
+    }
+
+    fun setLibraryView(v: String) {
+        libraryView.value = v
+        prefs?.edit()?.putString("libraryView", v)?.apply()
+    }
+
+    fun setIncludeShared(on: Boolean) {
+        includeShared.value = on
+        prefs?.edit()?.putBoolean("includeShared", on)?.apply()
+    }
+
+    fun setPurist(on: Boolean) {
+        purist.value = on
+        prefs?.edit()?.putBoolean("purist", on)?.apply()
+    }
+
+    fun moveInDisco(id: Long, from: Int, to: Int) {
+        discos.value = discos.value.map { d ->
+            if (d.id != id || from !in d.trackIds.indices || to !in d.trackIds.indices) d
+            else d.copy(trackIds = d.trackIds.toMutableList().apply { add(to, removeAt(from)) })
+        }
+        saveDiscos()
     }
 
     fun setStoreUrl(url: String?) {

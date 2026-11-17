@@ -13,15 +13,23 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = "1.3." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
+        versionName = "1.4." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
     }
 
     signingConfigs {
+        // Firma: si GitHub tiene la llave secreta, se usa esa; si no, la llave antigua del repositorio.
         create("stalker") {
-            storeFile = file("stalker.keystore")
-            storePassword = "stalker123"
+            val pw = System.getenv("KEYSTORE_PASSWORD")
+            if (!pw.isNullOrBlank() && file("release.keystore").exists()) {
+                storeFile = file("release.keystore")
+                storePassword = pw
+                keyPassword = pw
+            } else {
+                storeFile = file("stalker.keystore")
+                storePassword = "stalker123"
+                keyPassword = "stalker123"
+            }
             keyAlias = "stalker"
-            keyPassword = "stalker123"
         }
     }
 

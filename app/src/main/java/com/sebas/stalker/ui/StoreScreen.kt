@@ -158,7 +158,7 @@ private val shops = listOf(
 )
 
 @Composable
-fun StoreScreen(browser: BrowserState, bottomPadding: androidx.compose.ui.unit.Dp) {
+fun StoreScreen(browser: BrowserState, bottomPadding: androidx.compose.ui.unit.Dp, onExit: () -> Unit) {
     var showDownloads by remember { mutableStateOf(false) }
     val ids by Engine.downloads.collectAsState()
     val active = ids.size
@@ -166,7 +166,7 @@ fun StoreScreen(browser: BrowserState, bottomPadding: androidx.compose.ui.unit.D
     BackHandler(enabled = !browser.home) { browser.back() }
 
     if (browser.home) {
-        StoreHome(browser, bottomPadding, active) { showDownloads = true }
+        StoreHome(browser, bottomPadding, active, onExit) { showDownloads = true }
     } else {
         Column(Modifier.fillMaxSize().background(C.Marfil).statusBarsPadding().navigationBarsPadding().padding(bottom = bottomPadding)) {
             Row(
@@ -257,16 +257,20 @@ private fun DownloadsButton(active: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun StoreHome(browser: BrowserState, bottomPadding: androidx.compose.ui.unit.Dp, active: Int, onDownloads: () -> Unit) {
+private fun StoreHome(browser: BrowserState, bottomPadding: androidx.compose.ui.unit.Dp, active: Int, onExit: () -> Unit, onDownloads: () -> Unit) {
     var query by remember { mutableStateOf("") }
     val last by Engine.lastStoreUrl.collectAsState()
     val focus = LocalFocusManager.current
     CurtainSheet {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = bottomPadding + 24.dp)) {
-            ScreenHeader("Tienda", trailing = { DownloadsButton(active, onDownloads) })
+            ScreenHeader(
+                "Conseguir FLAC",
+                leading = { SoftButton(Ico.Back, "Volver a Sistema", onClick = onExit) },
+                trailing = { DownloadsButton(active, onDownloads) }
+            )
             Spacer(Modifier.height(6.dp))
             Text(
-                "Busca y descarga música mientras sigue sonando la tuya. Lo que bajes aparece solo en tu biblioteca.",
+                "Por si te falta algún disco en buena calidad. Un navegador sencillo: lo que descargues aparece solo en tu biblioteca.",
                 style = Secundario.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -304,7 +308,7 @@ private fun StoreHome(browser: BrowserState, bottomPadding: androidx.compose.ui.
                 }
             }
             Spacer(Modifier.height(22.dp))
-            Text("TIENDAS", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Text("DÓNDE ENCONTRAR FLAC", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             shops.forEachIndexed { i, shop ->
                 ShopCard(shop, i) { browser.open(shop.url) }
@@ -317,7 +321,7 @@ private fun StoreHome(browser: BrowserState, bottomPadding: androidx.compose.ui.
                     Text("• Las canciones se guardan en Música/Stalker.", style = Secundario)
                     Text("• Los álbumes que vienen en .zip se descomprimen solos.", style = Secundario)
                     Text("• Las descargas siguen aunque cambies de pantalla o cierres la app.", style = Secundario)
-                    Text("• En Bandcamp, al comprar elige el formato FLAC antes de descargar.", style = Secundario)
+                    Text("• En Bandcamp y Qobuz, al descargar elige el formato FLAC.", style = Secundario)
                 }
             }
         }

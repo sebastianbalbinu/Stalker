@@ -6,6 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -80,6 +83,25 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
     val usb by Engine.usbDevice.collectAsState()
     val queueTitle by Engine.queueTitle.collectAsState()
     var showQueue by remember { mutableStateOf(false) }
+    val flipPending by Engine.flipPending.collectAsState()
+    val flipAnim = remember { mutableFloatStateOf(0f) }
+    var flipping by remember { mutableStateOf(false) }
+    LaunchedEffect(flipping) {
+        if (!flipping) return@LaunchedEffect
+        var start = 0L
+        var t = 0f
+        while (t < 1f) {
+            withFrameNanos { now ->
+                if (start == 0L) start = now
+                t = ((now - start) / 800_000_000f).coerceIn(0f, 1f)
+                flipAnim.floatValue = t
+            }
+        }
+        flipAnim.floatValue = 0f
+        flipping = false
+        Engine.flipPending.value = false
+        vm.toggle()
+    }
     var showTimer by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     val sleepAt by Engine.sleepAt.collectAsState()
@@ -122,7 +144,36 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
                 onScratch = { deltaMs -> vm.seek((vm.positionMs.value + deltaMs).coerceIn(0L, dur.coerceAtLeast(0L))) },
                 progress = if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f,
                 gaps = if (queue.isEmpty()) 6 else queue.size,
+                index = index,
+                discKey = queueTitle to queue.firstOrNull()?.id,
+                flip = flipAnim.floatValue,
+                onArmGrab = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
+                onNeedleDrop = { i, within ->
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    val t = queue.getOrNull(i)
+                    if (t != null) vm.dropNeedle(i, (t.durationMs * within).toLong())
+                },
+                onLift = { if (playing) vm.toggle() },
             )
+        }
+
+        if (flipPending && !flipping) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Rojo)
+                    .clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        flipping = true
+                    }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Ico.Refresh, null, tint = C.SobreRojo, modifier = Modifier.size(20.dp))
+                Text(
+                    "Terminó el Lado A · toca para darle vuelta al disco",
+                    style = Cuerpo.copy(color = C.SobreRojo, fontWeight = FontWeight.Medium, fontSize = 14.sp),
+                    modifier = Modifier.padding(start = 12.dp)
+                )
+            }
         }
 
         val t = track
@@ -295,9 +346,54 @@ fun VinylGrooves(modifier: Modifier, gaps: Int = 6) {
     }
 }
 
+/** Geometría del tocadiscos, en fracciones del ancho del cuadro. */
+private object Deck {
+    const val PX = 0.99f        // pivote del brazo
+    const val PY = 0.02f
+    const val TX = -0.108f      // punta de la aguja, con el brazo sin girar
+    const val TY = 0.618f
+    const val R = 0.45f         // radio del disco
+    const val OUTER = 0.955f * R
+    const val INNER = 0.43f * R
+    const val REST = -10f
+
+    fun tip(deg: Float): Offset {
+        val a = Math.toRadians(deg.toDouble())
+        val c = kotlin.math.cos(a).toFloat()
+        val s = kotlin.math.sin(a).toFloat()
+        return Offset(PX + TX * c - TY * s, PY + TX * s + TY * c)
+    }
+
+    fun radius(deg: Float): Float {
+        val t = tip(deg)
+        return kotlin.math.hypot(t.x - 0.5f, t.y - 0.5f)
+    }
+
+    /** Ángulo del brazo para que la aguja quede en el radio [r]. */
+    fun degFor(r: Float): Float {
+        var lo = -8f
+        var hi = 24f
+        repeat(24) {
+            val mid = (lo + hi) / 2f
+            if (radius(mid) > r) lo = mid else hi = mid
+        }
+        return (lo + hi) / 2f
+    }
+
+    fun degFromPointer(px: Float, py: Float): Float {
+        val phi = kotlin.math.atan2((py - PY).toDouble(), (px - PX).toDouble())
+        val phi0 = kotlin.math.atan2(TY.toDouble(), TX.toDouble())
+        return Math.toDegrees(phi - phi0).toFloat()
+    }
+}
+
+/** Para no repetir la animación de "poner el disco" cada vez que se abre el reproductor. */
+private var lastDropped: Any? = null
+
 /**
- * Vinilo a 33⅓ rpm. El giro se calcula con el reloj de cada fotograma (no con animaciones del sistema),
- * así gira aunque el ahorro de batería desactive las animaciones. Arranca y frena suave, como un tocadiscos.
+ * El tocadiscos: vinilo a 33⅓ rpm (con el reloj de cada fotograma, así gira aunque el ahorro de batería
+ * apague las animaciones), brazo que sigue la pista real y que puedes tomar con el dedo para soltar la aguja
+ * en el surco que quieras.
  */
 @Composable
 fun Vinyl(
@@ -310,10 +406,17 @@ fun Vinyl(
     onScratch: (Long) -> Unit = {},
     progress: Float = 0f,
     gaps: Int = 6,
+    index: Int = 0,
+    discKey: Any? = null,
+    flip: Float = 0f,
+    onArmGrab: () -> Unit = {},
+    onNeedleDrop: (Int, Float) -> Unit = { _, _ -> },
+    onLift: () -> Unit = {},
 ) {
     val angle = remember { mutableFloatStateOf(0f) }
     val speed = remember { mutableFloatStateOf(0f) }
     var scratching by remember { mutableStateOf(false) }
+    var armDragging by remember { mutableStateOf(false) }
     LaunchedEffect(playing, scratching) {
         if (scratching) return@LaunchedEffect
         var last = 0L
@@ -332,20 +435,49 @@ fun Vinyl(
             }
         }
     }
-    // Brazo del tocadiscos: baja sobre el disco al sonar, vuelve a su apoyo en pausa.
-    val arm = remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(playing) {
-        val target = if (playing) 1f else 0f
+
+    // El brazo: en reposo fuera del disco; sonando, sobre el surco de la pista actual.
+    val n = gaps.coerceAtLeast(1)
+    val latest = rememberUpdatedState(Triple(playing, index, progress))
+    val dragging = rememberUpdatedState(armDragging)
+    val armDeg = remember { mutableFloatStateOf(Deck.REST) }
+    LaunchedEffect(n) {
         var last = 0L
-        while (kotlin.math.abs(arm.floatValue - target) > 0.002f) {
+        while (true) {
             withFrameNanos { now ->
                 val dt = if (last == 0L) 0f else (now - last) / 1_000_000_000f
                 last = now
-                arm.floatValue += (target - arm.floatValue) * min(1f, dt * 5f)
+                if (!dragging.value) {
+                    val (pl, idx, pr) = latest.value
+                    val target = if (pl) {
+                        val frac = ((idx + pr.coerceIn(0f, 1f)) / n).coerceIn(0f, 1f)
+                        Deck.degFor(Deck.OUTER - (Deck.OUTER - Deck.INNER) * frac)
+                    } else Deck.REST
+                    armDeg.floatValue += (target - armDeg.floatValue) * min(1f, dt * 4f)
+                }
             }
         }
-        arm.floatValue = target
     }
+
+    // "Poner el disco": sale de abajo y cae en el plato cuando empieza un disco nuevo.
+    val drop = remember { mutableFloatStateOf(if (discKey == lastDropped) 1f else 0f) }
+    LaunchedEffect(discKey) {
+        if (discKey == null || discKey == lastDropped) {
+            drop.floatValue = 1f
+            return@LaunchedEffect
+        }
+        lastDropped = discKey
+        drop.floatValue = 0f
+        var start = 0L
+        while (drop.floatValue < 1f) {
+            withFrameNanos { now ->
+                if (start == 0L) start = now
+                val t = ((now - start) / 700_000_000f).coerceIn(0f, 1f)
+                drop.floatValue = 1f - (1f - t) * (1f - t) * (1f - t)
+            }
+        }
+    }
+
     val art = rememberArt(track)
     val swipeDx = remember { mutableFloatStateOf(0f) }
     Box(
@@ -363,7 +495,7 @@ fun Vinyl(
                 )
             }
             .pointerInput(Unit) {
-                // Mantén presionado y gira el disco con el dedo para adelantar o retroceder, como un DJ.
+                // Mantén presionado y gira el disco con el dedo para adelantar o retroceder.
                 var prev = 0f
                 var accum = 0f
                 detectDragGesturesAfterLongPress(
@@ -389,12 +521,49 @@ fun Vinyl(
                         angle.floatValue = (angle.floatValue + d) % 360f
                     },
                 )
+            }
+            .pointerInput(n) {
+                // Tomar el brazo: si el dedo empieza sobre la cápsula, se mueve el brazo y al soltarlo
+                // la aguja cae en ese surco (cada franja es una canción). Fuera del disco, se levanta.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val w = size.width.toFloat()
+                    val tip = Deck.tip(armDeg.floatValue)
+                    val head = Offset(tip.x * w, tip.y * w)
+                    if ((down.position - head).getDistance() > w * 0.15f) return@awaitEachGesture
+                    down.consume()
+                    armDragging = true
+                    onArmGrab()
+                    while (true) {
+                        val ev = awaitPointerEvent()
+                        val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!ch.pressed) {
+                            ch.consume()
+                            break
+                        }
+                        ch.consume()
+                        armDeg.floatValue = Deck.degFromPointer(ch.position.x / w, ch.position.y / w).coerceIn(-14f, 22f)
+                    }
+                    armDragging = false
+                    val r = Deck.radius(armDeg.floatValue)
+                    if (r <= Deck.OUTER + 0.01f && r >= Deck.INNER) {
+                        val f = ((Deck.OUTER - r) / (Deck.OUTER - Deck.INNER)).coerceIn(0f, 0.9999f) * n
+                        val idx = f.toInt().coerceIn(0, n - 1)
+                        onNeedleDrop(idx, (f - idx).coerceIn(0f, 0.98f))
+                    } else {
+                        onLift()
+                    }
+                }
             },
         contentAlignment = Alignment.Center
     ) {
         Box(
             Modifier.fillMaxSize(0.9f).graphicsLayer {
                 translationX = swipeDx.floatValue * 0.25f
+                translationY = (1f - drop.floatValue) * size.height * 0.8f
+                alpha = (0.2f + drop.floatValue).coerceAtMost(1f)
+                rotationY = flip * 180f
+                cameraDistance = 14f * density
             }.shadow(22.dp, CircleShape, ambientColor = C.Negro, spotColor = C.Negro),
             contentAlignment = Alignment.Center
         ) {
@@ -404,24 +573,10 @@ fun Vinyl(
                     if (art != null) {
                         Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     } else {
-                        // Etiqueta como la del logo: roja con las ondas de sonido
-                        Canvas(Modifier.fillMaxSize()) {
-                            val rr = size.minDimension / 2f
-                            drawCircle(Brush.radialGradient(listOf(Color(0xFFB0181A), C.Rojo, Color(0xFF5E0808)), center = center, radius = rr), rr)
-                            drawCircle(Color.Black.copy(alpha = 0.25f), rr * 0.86f, style = Stroke(width = 1.5f))
-                            val bars = listOf(0.30f, 0.55f, 0.80f, 0.55f, 0.30f)
-                            val gap = rr * 0.17f
-                            bars.forEachIndexed { i, h ->
-                                val x = center.x + (i - 2) * gap
-                                val half = rr * h / 2f
-                                drawLine(
-                                    Color(0xFFF1DFC4), Offset(x, center.y - half), Offset(x, center.y + half),
-                                    strokeWidth = rr * 0.085f, cap = StrokeCap.Round
-                                )
-                            }
-                        }
+                        // Sin carátula: las rayas
+                        Image(painterResource(R.drawable.zigzag), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     }
-                    // Eje metálico, como en el logo
+                    // Eje metálico
                     Canvas(Modifier.size(16.dp)) {
                         val rr = size.minDimension / 2f
                         drawCircle(Color.Black.copy(alpha = 0.35f), rr, center + Offset(1.5f, 2f))
@@ -434,15 +589,13 @@ fun Vinyl(
                         )
                     }
                 }
-                // Borde de la etiqueta
                 Canvas(Modifier.fillMaxSize()) {
                     drawCircle(Color.Black.copy(alpha = 0.35f), size.minDimension * 0.185f, style = Stroke(width = 2.5f))
                 }
             }
-            // Brillo fijo (no gira), como la luz de la sala sobre el disco.
+            // Reflejo de la luz en los surcos: dos brillos opuestos y el rojo de la sala
             Canvas(Modifier.fillMaxSize()) {
                 val r = size.minDimension / 2f
-                // Reflejo de la luz en los surcos: dos brillos opuestos y el rojo de la sala
                 drawCircle(
                     brush = Brush.sweepGradient(
                         0f to Color.Transparent,
@@ -461,23 +614,16 @@ fun Vinyl(
                 )
             }
         }
-        Tonearm(arm.floatValue, progress, Modifier.fillMaxSize())
+        Tonearm(armDeg.floatValue, Modifier.fillMaxSize())
     }
 }
 
-/**
- * Brazo del tocadiscos, con la misma forma que el del logo: tubo champaña con un quiebre
- * y cápsula rectangular con franja roja. [down] va de 0 (en su apoyo) a 1 (sobre el disco);
- * sobre el disco avanza hacia el centro a medida que avanza la canción.
- */
+/** Brazo del tocadiscos con la forma del logo: tubo champaña con un quiebre y cápsula con franja roja. */
 @Composable
-fun Tonearm(down: Float, progress: Float, modifier: Modifier) {
+fun Tonearm(deg: Float, modifier: Modifier) {
     Canvas(modifier) {
         val w = size.width
-        val pivot = Offset(w * 0.99f, w * 0.02f)
-        val rest = -8f
-        val onDisc = -2f + 19f * progress.coerceIn(0f, 1f)
-        val deg = rest + (onDisc - rest) * down
+        val pivot = Offset(w * Deck.PX, w * Deck.PY)
         val metal = Brush.linearGradient(
             listOf(Color(0xFFF3EADB), Color(0xFFC9BCA7), Color(0xFF8F8372), Color(0xFFDCCFBC)),
             start = Offset(pivot.x - w * 0.1f, pivot.y), end = Offset(pivot.x + w * 0.05f, pivot.y + w * 0.6f)
@@ -485,21 +631,17 @@ fun Tonearm(down: Float, progress: Float, modifier: Modifier) {
         val a = Offset(pivot.x, pivot.y + w * 0.34f)
         val b = Offset(pivot.x - w * 0.07f, pivot.y + w * 0.52f)
         val tube = w * 0.016f
-        // Sombra sobre el disco
         rotate(deg, pivot) {
             val sh = Offset(w * 0.012f, w * 0.018f)
             drawLine(Color.Black.copy(alpha = 0.28f), pivot + sh, a + sh, strokeWidth = tube, cap = StrokeCap.Round)
             drawLine(Color.Black.copy(alpha = 0.28f), a + sh, b + sh, strokeWidth = tube, cap = StrokeCap.Round)
         }
         rotate(deg, pivot) {
-            // Base del brazo
             drawCircle(Color(0xFF1F1C1A), w * 0.075f, pivot)
             drawCircle(metal, w * 0.05f, pivot)
             drawCircle(Color(0xFF5E564C), w * 0.018f, pivot)
-            // Tubo con quiebre
             drawLine(metal, pivot, a, strokeWidth = tube, cap = StrokeCap.Round)
             drawLine(metal, a, b, strokeWidth = tube, cap = StrokeCap.Round)
-            // Cápsula alineada con el último tramo
             val dirDeg = Math.toDegrees(kotlin.math.atan2((b.y - a.y).toDouble(), (b.x - a.x).toDouble())).toFloat() - 90f
             rotate(dirDeg, b) {
                 val hw = w * 0.05f
@@ -507,10 +649,8 @@ fun Tonearm(down: Float, progress: Float, modifier: Modifier) {
                 val top = Offset(b.x - hw / 2f, b.y - w * 0.01f)
                 drawRoundRect(Color.Black.copy(alpha = 0.3f), top + Offset(w * 0.01f, w * 0.014f), Size(hw, hl), CornerRadius(5f, 5f))
                 drawRoundRect(metal, top, Size(hw, hl), CornerRadius(5f, 5f))
-                // franja oscura y franja roja, como en el logo
                 drawRect(Color(0xFF2A2522), Offset(top.x, top.y + hl * 0.72f), Size(hw, hl * 0.09f))
                 drawRect(C.Rojo, Offset(top.x, top.y + hl * 0.81f), Size(hw, hl * 0.07f))
-                // aguja
                 drawLine(Color(0xFF8F8372), Offset(b.x, top.y + hl), Offset(b.x, top.y + hl + w * 0.012f), strokeWidth = 2f)
             }
         }
