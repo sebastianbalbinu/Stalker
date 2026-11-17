@@ -404,15 +404,21 @@ fun Vinyl(
                     if (art != null) {
                         Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     } else {
-                        Image(painterResource(R.drawable.telon), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                        Column(Modifier.fillMaxSize()) {
-                            Spacer(Modifier.weight(1f))
-                            Text("STALKER", style = Cuerpo.copy(fontSize = 11.sp, letterSpacing = 3.sp, color = C.SobreRojo, textAlign = TextAlign.Center), modifier = Modifier.fillMaxWidth())
-                            Spacer(Modifier.weight(0.6f))
-                            Image(
-                                painterResource(R.drawable.zigzag), null,
-                                Modifier.fillMaxWidth().weight(0.9f), contentScale = ContentScale.Crop
-                            )
+                        // Etiqueta como la del logo: roja con las ondas de sonido
+                        Canvas(Modifier.fillMaxSize()) {
+                            val rr = size.minDimension / 2f
+                            drawCircle(Brush.radialGradient(listOf(Color(0xFFB0181A), C.Rojo, Color(0xFF5E0808)), center = center, radius = rr), rr)
+                            drawCircle(Color.Black.copy(alpha = 0.25f), rr * 0.86f, style = Stroke(width = 1.5f))
+                            val bars = listOf(0.30f, 0.55f, 0.80f, 0.55f, 0.30f)
+                            val gap = rr * 0.17f
+                            bars.forEachIndexed { i, h ->
+                                val x = center.x + (i - 2) * gap
+                                val half = rr * h / 2f
+                                drawLine(
+                                    Color(0xFFF1DFC4), Offset(x, center.y - half), Offset(x, center.y + half),
+                                    strokeWidth = rr * 0.085f, cap = StrokeCap.Round
+                                )
+                            }
                         }
                     }
                     // Eje metálico, como en el logo
