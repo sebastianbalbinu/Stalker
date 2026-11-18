@@ -208,10 +208,11 @@ fun Shelf3D(app: AppState, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val availW = maxWidth.value
         val availH = maxHeight.value
-        val cabW = min(availW * 0.80f, availH * 0.80f / Cab.H)
+        val cabW = min(availW * 0.78f, availH * 0.66f / Cab.H)
         val cabH = cabW * Cab.H
         val left = (availW - cabW) / 2
-        val top = (availH - cabH) / 2 + availH * 0.05f
+        // el mueble se apoya en el piso; arriba queda aire para el disco en exhibición
+        val top = (availH - cabH - availH * 0.09f).coerceAtLeast(cabW * 0.13f)
         val gap = availW
 
         Box(Modifier.fillMaxSize().pointerInput(units) {
@@ -252,7 +253,7 @@ fun Shelf3D(app: AppState, modifier: Modifier = Modifier) {
                     }
                     // en exhibición sobre el mueble: lo que suena o el último que llegó
                     val show = albums.firstOrNull { it.key == nowKey } ?: albums.maxByOrNull { it.added }
-                    if (u == unit && show != null) Display(show, nowKey == show.key, cabW, Modifier.offset((cabW * 0.70f).dp, (-cabW * 0.155f).dp)) {
+                    if (u == unit && show != null) Display(show, nowKey == show.key, cabW, Modifier.offset((cabW * 0.74f).dp, (-cabW * 0.118f).dp)) {
                         pulled = Pulled(show, Rect(Offset.Zero, Size.Zero))
                     }
                 }
@@ -489,7 +490,7 @@ private fun layoutSpines(n: Int, width: Float, height: Float, hover: Float?, foc
 
 @Composable
 private fun Display(a: Album, playing: Boolean, cabW: Float, modifier: Modifier, onClick: () -> Unit) {
-    val s = cabW * 0.15f
+    val s = cabW * 0.115f
     Box(
         modifier.size((s * 1.35f).dp, s.dp)
             .pointerHoverIcon(Hand)
