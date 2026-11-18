@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -389,7 +390,7 @@ fun AlbumGrid(app: AppState) {
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 40.dp, end = 64.dp, top = 18.dp, bottom = 30.dp),
         horizontalArrangement = Arrangement.spacedBy(30.dp),
-        verticalArrangement = Arrangement.spacedBy(30.dp),
+        verticalArrangement = Arrangement.spacedBy(34.dp),
     ) {
         items(list, key = { it.key }) { a -> SleeveCard(app, a) }
     }
@@ -450,7 +451,24 @@ fun SleeveCard(app: AppState, a: Album) {
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
+        // repisa de madera oscura sobre la que descansan las fundas
+        Canvas(
+            Modifier.fillMaxWidth().height(16.dp).layout { m, cs ->
+                val extra = 15.dp.roundToPx()
+                val w = cs.maxWidth + extra * 2
+                val pl = m.measure(cs.copy(minWidth = w, maxWidth = w))
+                layout(cs.maxWidth, pl.height) { pl.place(-extra, 0) }
+            }
+        ) {
+            val top = 5.dp.toPx()
+            drawRect(Brush.verticalGradient(listOf(Color(0xFF4A2C1D), Color(0xFF2E1A10)), endY = top), size = size.copy(height = top))
+            drawRect(Color(0x33F1DFC4), size = size.copy(height = 1f))
+            drawRect(Brush.verticalGradient(listOf(Color(0xFF1C0F09), Color(0xFF120905)), startY = top, endY = size.height * 0.75f),
+                topLeft = Offset(0f, top), size = size.copy(height = size.height * 0.75f - top))
+            drawRect(Brush.verticalGradient(listOf(Color(0x99000000), Color(0x00000000)), startY = size.height * 0.75f, endY = size.height),
+                topLeft = Offset(0f, size.height * 0.75f), size = size.copy(height = size.height * 0.25f))
+        }
+        Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (onDeck) {
                 Box(Modifier.size(6.dp).clip(CircleShape).background(C.RojoVivo))

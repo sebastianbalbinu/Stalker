@@ -124,7 +124,7 @@ private data class Spot(val track: Int, val ms: Long, val albumMs: Long, val sna
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, tilt: Float = 12f) {
+fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, tilt: Float = 9f) {
     val queue = player.queue
     val total = player.albumDurationMs.coerceAtLeast(1)
     val bounds = remember(queue) {
@@ -240,18 +240,25 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
                                     spot = spotAt(Deck.rFor(phi))
                                 } else {
                                     val r = hypot(m.x - Deck.C.x, m.y - Deck.C.y)
-                                    spot = spotAt(r)
+                                    spot = if (r >= Deck.R_INNER - 0.006f) spotAt(r) else null
                                 }
                             }
                             PointerEventType.Exit -> { hover = null; if (!dragging) spot = null }
                             PointerEventType.Press -> {
                                 val tip = Deck.tip(arm.value)
-                                val nearHead = hypot(m.x - tip.x, m.y - tip.y) < 0.055f
+                                val nearHead = hypot(m.x - tip.x, m.y - tip.y) < 0.075f
                                 val r = hypot(m.x - Deck.C.x, m.y - Deck.C.y)
-                                val start = Offset(0.075f, 0.655f)
+                                val start = Offset(0.085f, 0.685f)
                                 val cue = Offset(0.935f, 0.43f)
+                                val onArm = run {
+                                    val a = Deck.P
+                                    val b = tip
+                                    val ab = Offset(b.x - a.x, b.y - a.y)
+                                    val tt = (((m.x - a.x) * ab.x + (m.y - a.y) * ab.y) / (ab.x * ab.x + ab.y * ab.y)).coerceIn(0f, 1f)
+                                    tt > 0.35f && hypot(m.x - (a.x + ab.x * tt), m.y - (a.y + ab.y * tt)) < 0.022f
+                                }
                                 when {
-                                    nearHead && queue.isNotEmpty() -> { dragging = true; ch.consume() }
+                                    (nearHead || onArm) && queue.isNotEmpty() -> { dragging = true; ch.consume() }
                                     hypot(m.x - start.x, m.y - start.y) < 0.045f -> player.toggle()
                                     hypot(m.x - cue.x, m.y - cue.y) < 0.04f -> player.toggle()
                                     r <= Deck.R_VINYL && r >= Deck.R_INNER - 0.006f && queue.isNotEmpty() -> {
@@ -355,9 +362,11 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
             ),
             ringR, c, style = Stroke(ringW),
         )
-        // reflejo especular fino
-        rotate(-38f, c) {
-            drawArc(Color(0x1EFFFFFF), 200f, 26f, false, c - Offset(ringR, ringR), Size(ringR * 2, ringR * 2), style = Stroke(ringW * 0.9f, cap = StrokeCap.Round))
+        // reflejos finos sobre los surcos
+        for (k in 0 until 3) {
+            val rr = ringR - ringW * 0.3f + k * ringW * 0.3f
+            drawArc(Color(0x14FFF1DE), 205f, 22f, false, c - Offset(rr, rr), Size(rr * 2, rr * 2), style = Stroke(1.2f, cap = StrokeCap.Round))
+            drawArc(Color(0x10FFF1DE), 25f, 18f, false, c - Offset(rr, rr), Size(rr * 2, rr * 2), style = Stroke(1.2f, cap = StrokeCap.Round))
         }
 
         // anillo donde está el cursor: muestra dónde caerá la aguja
@@ -380,7 +389,7 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
                     drawCircle(C.Crema.copy(alpha = 0.55f), lr * 0.82f, c, style = Stroke(1.2f))
                     val tl = tm.measure("STALKER", txt((lr / 7.2f / density).sp, FontWeight.SemiBold, C.Crema, (lr / 30f / density).sp))
                     drawText(tl, topLeft = c - Offset(tl.size.width / 2f, lr * 0.52f))
-                    val t2 = tm.measure("33⅓", txt((lr / 10f / density).sp, FontWeight.Medium, C.Crema.copy(alpha = 0.7f)))
+                    val t2 = tm.measure("33 RPM", txt((lr / 10f / density).sp, FontWeight.Medium, C.Crema.copy(alpha = 0.7f)))
                     drawText(t2, topLeft = c + Offset(-t2.size.width / 2f, lr * 0.36f))
                 }
             }
@@ -390,17 +399,22 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
         drawCircle(Brush.radialGradient(listOf(Color(0xFFEDE6DC), Color(0xFF7D766E)), c - Offset(w * 0.002f, w * 0.002f), w * 0.009f), w * 0.0072f, c)
 
         // botón de arranque, velocidades, marca
-        val start = o(0.075f, 0.655f)
+        val start = o(0.085f, 0.685f)
         drawRoundRect(Color(0xFF1E1816), start - Offset(w * 0.04f, w * 0.022f), Size(w * 0.08f, w * 0.044f), CornerRadius(w * 0.008f))
         drawRoundRect(Color(0x26F1DFC4), start - Offset(w * 0.04f, w * 0.022f), Size(w * 0.08f, w * 0.044f), CornerRadius(w * 0.008f), style = Stroke(1f))
         val stt = tm.measure("START · STOP", txt((w * 0.0105f / density).sp, FontWeight.Medium, C.Tenue, (w * 0.0008f / density).sp))
         drawText(stt, topLeft = start - Offset(stt.size.width / 2f, stt.size.height / 2f))
-        drawCircle(if (player.playing) Color(0xFFFF3B2A) else Color(0xFF3A0D0A), w * 0.0035f, o(0.135f, 0.655f))
-        if (player.playing) drawCircle(Brush.radialGradient(listOf(Color(0x66FF3B2A), Color(0x00FF3B2A)), o(0.135f, 0.655f), w * 0.02f), w * 0.02f, o(0.135f, 0.655f))
-        val sp33 = tm.measure("33", txt((w * 0.012f / density).sp, FontWeight.SemiBold, C.Crema))
-        drawText(sp33, topLeft = o(0.165f, 0.655f) - Offset(0f, sp33.size.height / 2f))
-        val sp45 = tm.measure("45", txt((w * 0.012f / density).sp, FontWeight.SemiBold, C.Apagado))
-        drawText(sp45, topLeft = o(0.2f, 0.655f) - Offset(0f, sp45.size.height / 2f))
+        val led = o(0.085f, 0.64f)
+        drawCircle(if (player.playing) Color(0xFFFF3B2A) else Color(0xFF3A0D0A), w * 0.0035f, led)
+        if (player.playing) drawCircle(Brush.radialGradient(listOf(Color(0x66FF3B2A), Color(0x00FF3B2A)), led, w * 0.02f), w * 0.02f, led)
+        for ((k, label) in listOf("33", "45").withIndex()) {
+            val bc = o(0.165f + k * 0.05f, 0.685f)
+            drawRoundRect(Color(0xFF1E1816), bc - Offset(w * 0.02f, w * 0.016f), Size(w * 0.04f, w * 0.032f), CornerRadius(w * 0.006f))
+            drawRoundRect(Color(0x22F1DFC4), bc - Offset(w * 0.02f, w * 0.016f), Size(w * 0.04f, w * 0.032f), CornerRadius(w * 0.006f), style = Stroke(1f))
+            val tl = tm.measure(label, txt((w * 0.0115f / density).sp, FontWeight.SemiBold, if (k == 0) C.Crema else C.Apagado))
+            drawText(tl, topLeft = bc - Offset(tl.size.width / 2f, tl.size.height / 2f))
+            if (k == 0) drawCircle(Color(0xFFFF6A4A).copy(alpha = if (player.playing) 0.9f else 0.35f), w * 0.0022f, bc + Offset(0f, -w * 0.024f))
+        }
         val brand = tm.measure("S T A L K E R", txt((w * 0.0135f / density).sp, FontWeight.SemiBold, C.Crema.copy(alpha = 0.42f), (w * 0.0012f / density).sp))
         drawText(brand, topLeft = o(0.955f, 0.69f) - Offset(brand.size.width.toFloat(), brand.size.height.toFloat()))
         val hifi = tm.measure("DIRECT DRIVE · BIT-PERFECT", txt((w * 0.0085f / density).sp, FontWeight.Medium, C.Apagado, (w * 0.0006f / density).sp))
