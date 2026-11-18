@@ -3,7 +3,7 @@ name: Compilar APK
 on:
   push:
     branches: [main]
-    paths-ignore: ['docs/**', 'README.md']
+    paths-ignore: ['docs/**', 'README.md', 'desktop/**', '.github/workflows/desktop.yml']
   workflow_dispatch:
 
 permissions:

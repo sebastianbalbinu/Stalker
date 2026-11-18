@@ -7,3 +7,9 @@ local.properties
 .DS_Store
 app/release.keystore
 *.jks
+desktop/build/
+desktop/.gradle/
+desktop/.kotlin/
+desktop/native/miniaudio.h
+desktop/native/*.dll
+desktop/resources/windows/*.dll

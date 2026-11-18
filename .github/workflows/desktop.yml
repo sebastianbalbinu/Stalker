@@ -1,0 +1,88 @@
+name: Compilar Stalker para Windows
+
+on:
+  push:
+    branches: [main]
+    paths: ['desktop/**', '.github/workflows/desktop.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  motor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compilar el motor de audio (stalker_audio.dll)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-mingw-w64-x86-64 > /dev/null
+          cd desktop/native
+          curl -sSfL -o miniaudio.h https://raw.githubusercontent.com/mackron/miniaudio/0.11.21/miniaudio.h
+          x86_64-w64-mingw32-gcc -O2 -shared -o stalker_audio.dll stalker_audio.c -lole32 -static-libgcc -Wl,--no-insert-timestamp
+          ls -la stalker_audio.dll
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motor
+          path: desktop/native/stalker_audio.dll
+
+  app:
+    needs: motor
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: motor
+          path: desktop/resources/windows
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Compilar instalador
+        working-directory: desktop
+        env:
+          PC_VERSION: 1.0.${{ github.run_number }}
+        run: |
+          set -o pipefail
+          gradle packageMsi createDistributable --stacktrace 2>&1 | tee ../build-log.txt
+      - name: Empaquetar
+        run: |
+          mkdir -p salida
+          cp desktop/build/compose/binaries/main/msi/*.msi salida/Stalker-PC.msi
+          cd desktop/build/compose/binaries/main/app
+          7z a -tzip ../../../../../../salida/Stalker-PC-portable.zip Stalker > /dev/null
+          ls -la ../../../../../../salida
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Stalker-PC
+          path: salida/*
+      - name: Publicar versión
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pc-v1.0.${{ github.run_number }}
+          name: Stalker para Windows 1.0.${{ github.run_number }}
+          make_latest: false
+          body: |
+            Stalker para Windows. Libre, gratis y sin anuncios.
+            Descarga **Stalker-PC.msi** e instálalo. Si Windows muestra "Windows protegió tu PC", toca "Más información" → "Ejecutar de todas formas" (la app aún no tiene firma de pago).
+            También está **Stalker-PC-portable.zip**: descomprime y abre Stalker.exe.
+          files: |
+            salida/Stalker-PC.msi
+            salida/Stalker-PC-portable.zip
+      - name: Publicar registro si falla
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pclog-${{ github.run_number }}
+          name: Registro PC ${{ github.run_number }}
+          prerelease: true
+          make_latest: false
+          files: build-log.txt
