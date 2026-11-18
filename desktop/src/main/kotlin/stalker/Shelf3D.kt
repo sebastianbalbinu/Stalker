@@ -9,6 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -249,12 +251,12 @@ fun Shelf3D(app: AppState, modifier: Modifier = Modifier) {
                         Cubby(
                             items, tm, q, nowKey, app.favorites, app.shelfMode == 1,
                             Modifier.offset(r.left.dp, r.top.dp).size(r.width.dp, r.height.dp),
-                        ) { a, rect -> pulled = Pulled(a, rect) }
+                        ) { a, rect -> if (a.key == nowKey) app.view = View.Sala else pulled = Pulled(a, rect) }
                     }
                     // en exhibición sobre el mueble: lo que suena o el último que llegó
                     val show = albums.firstOrNull { it.key == nowKey } ?: albums.maxByOrNull { it.added }
-                    if (u == unit && show != null) Display(show, nowKey == show.key, cabW, Modifier.offset((cabW * 0.74f).dp, (-cabW * 0.118f).dp)) {
-                        pulled = Pulled(show, Rect(Offset.Zero, Size.Zero))
+                    if (u == unit && show != null) Display(show, nowKey == show.key, cabW, Modifier.offset((cabW * 0.66f).dp, (-cabW * 0.155f).dp)) {
+                        if (nowKey == show.key) app.view = View.Sala else pulled = Pulled(show, Rect(Offset.Zero, Size.Zero))
                     }
                 }
             }
@@ -420,6 +422,19 @@ private fun Cubby(
                     val lift = l.lift[i] * h * 0.07f
                     val dimmed = (q.isNotEmpty() && !matches(a, q)) || (onlyFavs && a.key !in favs)
                     val y0 = h - recH - lift
+                    if (a.key == nowKey) {
+                        // está en el tocadiscos: queda su hueco, con la sombra de los vecinos
+                        drawRect(Brush.horizontalGradient(listOf(Color(0x66000000), Color(0x22000000), Color(0x66000000)), startX = x, endX = x + w),
+                            Offset(x, h - recH), Size(w, recH))
+                        if (l.lift[i] > 0.6f) {
+                            val tl = tm.measure("En el tocadiscos", txt(10.sp, FontWeight.SemiBold, C.Crema))
+                            val bx = (x + w / 2 - tl.size.width / 2f - 8f).coerceIn(2f, size.width - tl.size.width - 18f)
+                            drawRoundRect(Color(0xF0140D0B), Offset(bx, h * 0.38f), Size(tl.size.width + 16f, tl.size.height + 10f), CornerRadius(8f))
+                            drawRect(C.Rojo, Offset(bx, h * 0.38f + 4f), Size(2.5f, tl.size.height + 2f))
+                            drawText(tl, topLeft = Offset(bx + 8f, h * 0.38f + 5f))
+                        }
+                        continue
+                    }
                     // cartón del lomo
                     drawRect(main, Offset(x, y0), Size(w, recH))
                     drawRect(acc, Offset(x, y0 + recH * 0.10f), Size(w, recH * 0.035f))
@@ -430,7 +445,6 @@ private fun Cubby(
                     drawRect(Color(0x55000000), Offset(x + w - 0.8f, y0), Size(0.8f, recH))
                     // desgaste arriba
                     drawRect(Color(0x22FFFFFF), Offset(x, y0), Size(w, 1.2f))
-                    if (a.key == nowKey) drawRect(C.RojoVivo, Offset(x + w * 0.25f, y0 + recH * 0.03f), Size(w * 0.5f, w * 0.5f))
                     if (a.key in favs && !onlyFavs) drawRect(C.Oro.copy(alpha = 0.9f), Offset(x, y0 + recH - 3f), Size(w, 2f))
                     // nombre vertical cuando el lomo se agranda lo suficiente
                     if (w > 13f) {
@@ -488,34 +502,82 @@ private fun layoutSpines(n: Int, width: Float, height: Float, hover: Float?, foc
 
 /* ------------------------------------------------------------------ disco en exhibición */
 
+/**
+ * Atril de nogal sobre el mueble: la funda parada derecha, el vinilo asomando a un lado,
+ * una luz cálida desde arriba y una plaquita dorada. Todo estático salvo el paso del mouse.
+ */
 @Composable
 private fun Display(a: Album, playing: Boolean, cabW: Float, modifier: Modifier, onClick: () -> Unit) {
-    val s = cabW * 0.115f
+    val s = cabW * 0.12f                 // lado de la funda
+    val boxW = s * 1.9f
+    val boxH = s * 1.30f
+    val src = remember { MutableInteractionSource() }
+    val hovered by src.collectIsHoveredAsState()
+    val out = animateFloatAsState(if (hovered) 1f else 0f, tween(320))
+    val art = rememberArt(a.cover)
+    val tm = rememberTextMeasurer()
     Box(
-        modifier.size((s * 1.35f).dp, s.dp)
+        modifier.size(boxW.dp, boxH.dp)
+            .hoverable(src)
             .pointerHoverIcon(Hand)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .clickable(interactionSource = src, indication = null, onClick = onClick)
     ) {
-        val art = rememberArt(a.cover)
-        // vinilo asomando detrás
-        Canvas(Modifier.offset((s * 0.32f).dp, 0.dp).size(s.dp)) {
-            val c = center
-            val r = size.minDimension * 0.47f
-            drawCircle(Color(0xFF0C0B0B), r, c)
-            for (i in 0 until 10) drawCircle(Color.White.copy(alpha = 0.04f), r * (0.45f + i * 0.05f), c, style = Stroke(0.7f))
-            drawCircle(if (art != null) C.Rojo else C.Rojo, r * 0.3f, c)
+        // luz de vitrina y atril
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val cx = w * 0.42f
+            drawOval(Brush.radialGradient(listOf(Color(0x40FFD2A0), Color(0x00FFD2A0)), Offset(cx, h * 0.45f), w * 0.55f),
+                Offset(cx - w * 0.55f, -h * 0.1f), Size(w * 1.1f, h * 1.1f))
+            val ledgeY = h - h * 0.17f
+            // sombra del atril sobre el mueble
+            drawOval(Color(0x88000000), Offset(w * 0.06f, h - h * 0.07f), Size(w * 0.74f, h * 0.07f))
+            // base del atril (nogal con canto iluminado)
+            drawRect(ShaderBrush(ImageShader(Res.plank, TileMode.Repeated, TileMode.Repeated)), Offset(w * 0.08f, ledgeY), Size(w * 0.70f, h * 0.10f))
+            drawRect(Color(0x55000000), Offset(w * 0.08f, ledgeY + h * 0.03f), Size(w * 0.70f, h * 0.07f))
+            drawRect(Color(0x40FFE2C0), Offset(w * 0.08f, ledgeY), Size(w * 0.70f, 1.2f))
+            // labio dorado que sostiene la funda
+            drawRect(Brush.verticalGradient(listOf(Color(0xFFE9C987), Color(0xFF8A6A33))), Offset(w * 0.08f, ledgeY - h * 0.035f), Size(w * 0.70f, h * 0.035f))
+            // plaquita
+            val label = if (playing) "SONANDO" else "RECIÉN LLEGADO"
+            val tl = tm.measure(label, txt((h * 0.045f / density).coerceAtLeast(7f).sp, FontWeight.SemiBold, Color(0xFF2A1A0A), (h * 0.006f / density).sp))
+            val pw = tl.size.width + h * 0.08f
+            val px = w * 0.43f - pw / 2
+            val py = ledgeY + h * 0.025f
+            drawRoundRect(Brush.verticalGradient(listOf(Color(0xFFF2D89A), Color(0xFFB08A45))), Offset(px, py), Size(pw, tl.size.height + h * 0.02f), CornerRadius(2f))
+            drawText(tl, topLeft = Offset(px + h * 0.04f, py + h * 0.01f))
         }
-        // funda apoyada contra la pared
-        Box(Modifier.size(s.dp).graphicsLayer {
-            rotationZ = -4f
-            shadowElevation = 10.dp.toPx()
-            shape = RoundedCornerShape(2.dp)
-            clip = true
+        val ledgeTop = boxH - boxH * 0.17f - boxH * 0.035f
+        // vinilo asomando por la derecha (sale un poco más al pasar el mouse)
+        Canvas(Modifier.offset((boxW * 0.42f - s / 2 + s * 0.30f).dp, (ledgeTop - s * 0.96f).dp).size((s * 0.96f).dp).graphicsLayer {
+            translationX = s * 0.16f * out.value * density
+            rotationZ = 30f * out.value
         }) {
-            Cover(a.cover, Modifier.fillMaxSize(), radius = 2.dp)
+            val c = center
+            val r = size.minDimension * 0.49f
+            drawCircle(Color(0x99000000), r, c + Offset(3f, 5f))
+            drawCircle(Color(0xFF0C0B0B), r, c)
+            for (i in 0 until 12) drawCircle(Color.White.copy(alpha = 0.035f + (i % 3) * 0.012f), r * (0.42f + i * 0.045f), c, style = Stroke(0.7f))
+            drawCircle(Brush.sweepGradient(0f to Color(0x00FFFFFF), 0.1f to Color(0x20FFFFFF), 0.2f to Color(0x00FFFFFF), 0.6f to Color(0x00FFFFFF), 0.7f to Color(0x16FFFFFF), 0.8f to Color(0x00FFFFFF), center = c), r * 0.7f, c, style = Stroke(r * 0.56f))
+            val lr = r * 0.33f
+            clipPath(Path().apply { addOval(Rect(c, lr)) }) {
+                if (art != null) drawCover(art, topLeft = c - Offset(lr, lr), w = lr * 2, h = lr * 2) else drawCircle(C.Rojo, lr, c)
+            }
+            drawCircle(C.Crema, r * 0.025f, c)
         }
-        if (playing) Box(Modifier.align(Alignment.BottomStart).offset(y = 14.dp).clip(RoundedCornerShape(4.dp)).background(C.Rojo).padding(horizontal = 6.dp, vertical = 2.dp)) {
-            T("SONANDO", 8, FontWeight.SemiBold, C.Crema, spacing = 1f)
+        // la funda, derecha, apoyada en el labio del atril
+        Box(
+            Modifier.offset((boxW * 0.42f - s / 2).dp, (ledgeTop - s + 2f).dp).size(s.dp).graphicsLayer {
+                translationY = -3.dp.toPx() * out.value
+                shadowElevation = (10 + 8 * out.value).dp.toPx()
+                shape = RoundedCornerShape(2.dp)
+                clip = true
+            }
+        ) {
+            Cover(a.cover, Modifier.fillMaxSize(), radius = 2.dp)
+            Canvas(Modifier.fillMaxSize()) {
+                drawRect(Brush.linearGradient(listOf(Color(0x22FFFFFF), Color(0x00FFFFFF), Color(0x00FFFFFF), Color(0x10FFFFFF)), start = Offset.Zero, end = Offset(size.width, size.height)))
+            }
         }
     }
 }
