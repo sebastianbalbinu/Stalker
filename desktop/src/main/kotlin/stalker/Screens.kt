@@ -109,6 +109,7 @@ fun SalaScreen(app: AppState) {
 
 @Composable
 fun NowPanel(app: AppState, modifier: Modifier) {
+    Jam.version
     val p = app.player
     val t = p.current
     Card(modifier) {
@@ -175,10 +176,27 @@ fun NowPanel(app: AppState, modifier: Modifier) {
             }
             Spacer(Modifier.height(16.dp))
             Box(Modifier.fillMaxWidth().height(1.dp).background(C.Linea))
-            Spacer(Modifier.height(12.dp))
-            Tracklist(app, Modifier.weight(1f))
+            Spacer(Modifier.height(10.dp))
+            Row(
+                Modifier.clip(RoundedCornerShape(50)).background(Color(0x12F1DFC4)).padding(3.dp),
+            ) {
+                PanelTab("Pistas", app.panelTab == 0) { app.panelTab = 0 }
+                PanelTab(if (Jam.core.active) "Jam · ${Jam.core.peers.size.coerceAtLeast(1)}" else "Jam", app.panelTab == 1) { app.panelTab = 1 }
+            }
+            Spacer(Modifier.height(10.dp))
+            if (app.panelTab == 0) Tracklist(app, Modifier.weight(1f)) else JamView(app, Modifier.weight(1f))
         }
     }
+}
+
+@Composable
+private fun PanelTab(label: String, active: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(50)).background(if (active) C.Crema else Color.Transparent)
+            .pointerHoverIcon(Hand)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 5.dp)
+    ) { T(label, 11, FontWeight.Medium, if (active) C.Sombra else C.Crema) }
 }
 
 @Composable

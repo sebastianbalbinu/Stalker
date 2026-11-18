@@ -154,6 +154,13 @@ class Player {
         if (positionMs > 3000 || index == 0) seek(0) else scope.launch { load(index - 1, 0, true) }
     }
 
+    /** Para la Jam: ir a una canción en un punto exacto. */
+    fun jumpTo(i: Int, ms: Long, play: Boolean) {
+        index = i
+        positionMs = ms
+        scope.launch { load(i, ms, play) }
+    }
+
     fun jump(i: Int) { scope.launch { load(i, 0, true); drops++ } }
 
     fun seek(ms: Long) {

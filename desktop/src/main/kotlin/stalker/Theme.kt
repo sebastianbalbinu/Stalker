@@ -45,7 +45,7 @@ val Inter = FontFamily(
 fun txt(size: TextUnit = 13.sp, weight: FontWeight = FontWeight.Normal, color: Color = C.Crema, spacing: TextUnit = 0.sp) =
     TextStyle(fontFamily = Inter, fontSize = size, fontWeight = weight, color = color, letterSpacing = spacing)
 
-enum class Ico { Play, Pause, Next, Prev, Mini, Minimize, Maximize, Restore, Close, Gear, Search, Folder, Shelf, Room, Expand, Heart, HeartOn, Plus, Trash, Speaker, Sun }
+enum class Ico { Play, Pause, Next, Prev, Mini, Minimize, Maximize, Restore, Close, Gear, Search, Folder, Shelf, Room, Expand, Heart, HeartOn, Plus, Trash, Speaker, Sun, Jam }
 
 /** Iconos dibujados a mano, finos y redondeados. */
 @Composable
@@ -143,6 +143,10 @@ fun DrawScope.drawIco(ico: Ico, color: Color) {
         Ico.Speaker -> {
             drawPath(p(0.14f, 0.4f, 0.3f, 0.4f, 0.5f, 0.22f, 0.5f, 0.78f, 0.3f, 0.6f, 0.14f, 0.6f, close = true), color)
             drawArc(color, -45f, 90f, false, Offset(0.4f * w, 0.3f * w), Size(0.4f * w, 0.4f * w), style = s)
+        }
+        Ico.Jam -> {
+            drawCircle(color, 0.22f * w, Offset(0.37f * w, 0.5f * w), style = s)
+            drawCircle(color, 0.22f * w, Offset(0.63f * w, 0.5f * w), style = s)
         }
         Ico.Sun -> {
             drawCircle(color, 0.16f * w, center)

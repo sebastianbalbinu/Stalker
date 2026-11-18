@@ -104,6 +104,7 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
     }
     var showTimer by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
+    var showJam by remember { mutableStateOf(false) }
     val sleepAt by Engine.sleepAt.collectAsState()
     val sleepEnd by Engine.sleepEndOfDisco.collectAsState()
     val tags by Engine.currentTags.collectAsState()
@@ -219,7 +220,8 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
             ) { vm.cycleRepeat() }
         }
 
-        Spacer(Modifier.height(2.dp))
+        JamBar { showJam = true }
+
         val bt = route == "bluetooth"
         Row(
             Modifier.fillMaxWidth()
@@ -260,6 +262,7 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
         QueueSheet(queueTitle, queue, index, onPick = { vm.jumpTo(it) }, onRemove = { vm.removeFromQueue(it) }, onMove = { f, t -> vm.moveInQueue(f, t) }, onDismiss = { showQueue = false })
     }
     if (showTimer) TimerSheet { showTimer = false }
+    if (showJam) JamSheet { showJam = false }
     if (showLyrics) {
         LyricsSheet(tags, pos, track?.title, onSeek = { vm.seek(it) }, onDismiss = { showLyrics = false })
     }

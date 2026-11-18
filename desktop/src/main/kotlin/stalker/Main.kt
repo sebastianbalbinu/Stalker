@@ -101,8 +101,19 @@ class AppState(val player: Player) {
     var query by mutableStateOf("")
     var shelfMode by mutableIntStateOf(0)
     var typing by mutableStateOf(false)
+    /** Parte de abajo del panel: 0 pistas, 1 Jam. */
+    var panelTab by mutableIntStateOf(0)
+    var notice by mutableStateOf<String?>(null)
 
     fun start() {
+        Jam.attach(this)
+        CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {
+            var n = 0
+            while (true) {
+                delay(500)
+                Jam.tick(this@AppState, ++n)
+            }
+        }
         io.launch {
             val cached = Library.loadCache()
             if (cached.isNotEmpty()) publish(cached)
@@ -149,6 +160,36 @@ class AppState(val player: Player) {
         }
     }
 
+    /** Abre un disco compartido desde el celular (.stalker.zip) y lo guarda en Música\\Stalker. */
+    fun importDisc(file: File) {
+        io.launch {
+            notice = "Abriendo ${file.name}…"
+            val res = try { Discs.import(file) } catch (t: Throwable) { null }
+            if (res == null) { notice = "No se pudo abrir ${file.name}"; return@launch }
+            val root = res.parentFile.parentFile.absolutePath
+            if (folders.none { root.startsWith(it, ignoreCase = true) || res.absolutePath.startsWith(it, ignoreCase = true) }) {
+                folders = folders + root
+                Prefs.folders = folders
+            }
+            scan()
+            notice = "Disco «${res.name}» agregado a la estantería"
+            delay(5000)
+            notice = null
+        }
+    }
+
+    fun pickDisc() {
+        io.launch {
+            val f = withContext(Dispatchers.Main) {
+                val fc = JFileChooser(System.getProperty("user.home") + File.separator + "Downloads")
+                fc.dialogTitle = "Abrir un disco compartido (.stalker.zip)"
+                fc.fileFilter = javax.swing.filechooser.FileNameExtensionFilter("Disco de Stalker (.zip)", "zip")
+                if (fc.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) fc.selectedFile else null
+            } ?: return@launch
+            importDisc(f)
+        }
+    }
+
     fun removeFolder(f: String) {
         folders = folders - f
         Prefs.folders = folders
@@ -190,12 +231,13 @@ fun polishWindow(w: java.awt.Window, round: Boolean = true) {
 
 val version: String get() = System.getProperty("stalker.version") ?: "1.0"
 
-fun main() {
+fun main(args: Array<String>) {
     try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) } catch (_: Throwable) {}
     Library.quiet()
     val player = Player()
     val app = AppState(player)
     app.start()
+    args.firstOrNull { it.endsWith(".zip", true) }?.let { app.importDisc(File(it)) }
     Runtime.getRuntime().addShutdownHook(Thread { player.shutdown() })
 
     application {
@@ -253,6 +295,7 @@ private fun handleKey(app: AppState, e: androidx.compose.ui.input.key.KeyEvent, 
 
 @Composable
 private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.compose.ui.window.WindowState) {
+    Jam.version
     var restoreBounds by remember { mutableStateOf<Rectangle?>(null) }
     val window = scope.window
     fun toggleMax() {
@@ -308,6 +351,10 @@ private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.comp
                         Seg("Estantería", app.view == View.Shelf) { app.view = View.Shelf }
                     }
                     Spacer(Modifier.weight(1f))
+                    RoundButton(Ico.Jam, {
+                        app.view = View.Sala; app.panelTab = 1
+                    }, 30.dp, 15.dp, tint = if (Jam.core.active) C.RojoVivo else C.Tenue)
+                    Spacer(Modifier.width(4.dp))
                     RoundButton(Ico.Gear, { app.settings = true }, 30.dp, 15.dp, tint = C.Tenue)
                     Spacer(Modifier.width(4.dp))
                     RoundButton(Ico.Expand, {
@@ -332,6 +379,11 @@ private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.comp
             ResizeGrip(window, Modifier.align(Alignment.BottomEnd))
         }
 
+        app.notice?.let { n ->
+            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 30.dp).clip(RoundedCornerShape(50)).background(C.Crema).padding(horizontal = 18.dp, vertical = 10.dp)) {
+                T(n, 12, FontWeight.Medium, C.Sombra)
+            }
+        }
         AnimatedVisibility(app.settings, enter = fadeIn(tween(200)), exit = fadeOut(tween(200))) {
             SettingsSheet(app)
         }
@@ -437,6 +489,9 @@ fun SettingsSheet(app: AppState) {
                     Pill("Agregar carpeta", { app.addFolder() }, ico = Ico.Plus)
                     Pill(if (app.scanning) "Buscando…" else "Buscar música nueva", { app.rescan() }, ico = Ico.Search)
                 }
+                Spacer(Modifier.height(10.dp))
+                Pill("Abrir disco compartido (.stalker.zip)", { app.pickDisc() }, ico = Ico.Shelf)
+                T("Los discos que te mandan desde Stalker en el celular se guardan en Música\\Stalker.", 10, color = C.Apagado, maxLines = 2)
 
                 Spacer(Modifier.height(26.dp))
                 Section("ATAJOS")

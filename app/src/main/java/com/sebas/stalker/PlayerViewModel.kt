@@ -50,6 +50,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         Engine.init(app)
+        Jam.init(app)
+        Jam.core.onRemote = { st -> viewModelScope.launch { applyJam(st, soft = false) } }
+        Jam.core.onHello = { viewModelScope.launch { publishJam(force = true) } }
+        // Jam: quien la abrió cuenta cada cambio; los invitados corrigen la deriva
+        viewModelScope.launch {
+            var tick = 0
+            while (true) {
+                delay(500)
+                tick++
+                val core = Jam.core
+                if (!core.active || !core.live) continue
+                if (core.host) publishJam(force = false)
+                else if (tick % 4 == 0) core.remote?.let { applyJam(it, soft = true) }
+            }
+        }
         viewModelScope.launch { Updates.check(app) }
         try {
             app.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observer)
@@ -147,6 +162,65 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val n = c.mediaItemCount
         if (from == to || from !in 0 until n || to !in 0 until n) return
         c.moveMediaItem(from, to)
+    }
+
+    // ------------------------------------------------------------ Jam
+
+    private var jamIdx = -1
+    private var jamPlaying = false
+    private var jamPos = 0L
+    private var jamAt = 0L
+    private var jamQueue: List<Long> = emptyList()
+
+    private fun publishJam(force: Boolean) {
+        val c = controller ?: return
+        val q = queue.value
+        if (q.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val pos = c.currentPosition
+        val idx = c.currentMediaItemIndex
+        val ids = q.map { it.id }
+        val expected = jamPos + if (jamPlaying) now - jamAt else 0
+        val changed = force || idx != jamIdx || c.isPlaying != jamPlaying || ids != jamQueue ||
+            kotlin.math.abs(pos - expected) > 1500 || now - jamAt > 4000
+        if (!changed) return
+        jamIdx = idx; jamPlaying = c.isPlaying; jamPos = pos; jamAt = now; jamQueue = ids
+        Jam.core.publish(
+            JamState(
+                Engine.queueTitle.value ?: q.getOrNull(idx)?.album ?: "Disco",
+                q.map { JamTrack(it.title, it.artist, it.album, it.durationMs) },
+                idx, pos, c.isPlaying,
+            )
+        )
+    }
+
+    private fun applyJam(st: JamState, soft: Boolean) {
+        val c = controller ?: return
+        val lib = Engine.tracks.value
+        val mapped = st.tracks.map { r -> jamMatch(r, lib, { it.title }, { it.artist }, { it.durationMs }) }
+        Jam.missing.value = st.tracks.filterIndexed { i, _ -> mapped[i] == null }.map { it.title }
+        val have = mapped.filterNotNull()
+        val cur = mapped.getOrNull(st.index)
+        if (cur == null) {
+            if (c.isPlaying) c.pause()
+            return
+        }
+        val localIdx = have.indexOf(cur)
+        val exp = st.expectedPos(System.currentTimeMillis()).coerceAtLeast(0)
+        if (queue.value.map { it.id } != have.map { it.id }) {
+            Engine.setQueueTitle(st.disc)
+            c.shuffleModeEnabled = false
+            c.setMediaItems(have.map { Engine.mediaItem(it) }, localIdx, exp)
+            c.prepare()
+            c.playWhenReady = st.playing
+            return
+        }
+        if (c.currentMediaItemIndex != localIdx) c.seekTo(localIdx, exp)
+        else if (kotlin.math.abs(c.currentPosition - exp) > (if (soft) 900 else 450)) c.seekTo(exp)
+        if (st.playing && !c.isPlaying) {
+            if (c.playbackState == Player.STATE_IDLE) c.prepare()
+            c.play()
+        } else if (!st.playing && c.isPlaying) c.pause()
     }
 
     fun removeFromQueue(i: Int) {
