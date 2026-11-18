@@ -36,6 +36,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -327,12 +330,10 @@ private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.comp
     }
 
     Box(Modifier.fillMaxSize().background(C.Sombra)) {
-        Crossfade(app.view, animationSpec = tween(420)) { v ->
-            when (v) {
-                View.Sala -> SalaScreen(app)
-                View.Shelf -> ShelfScreen(app)
-            }
-        }
+        // las dos vistas quedan vivas: cambiar es solo un fundido entre imágenes ya pintadas
+        val sala = androidx.compose.animation.core.animateFloatAsState(if (app.view == View.Sala) 1f else 0f, tween(320))
+        KeptView(sala, app.view == View.Sala) { SalaScreen(app) }
+        KeptView(remember { derivedStateOf { 1f - sala.value } }, app.view == View.Shelf) { ShelfScreen(app) }
 
         // barra superior
         if (!app.immersive) {
@@ -401,6 +402,19 @@ private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.comp
         AnimatedVisibility(app.settings, enter = fadeIn(tween(200)), exit = fadeOut(tween(200))) {
             SettingsSheet(app)
         }
+    }
+}
+
+@Composable
+private fun KeptView(alpha: androidx.compose.runtime.State<Float>, active: Boolean, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().zIndex(if (active) 1f else 0f).graphicsLayer { this.alpha = alpha.value }) {
+        content()
+        // la vista escondida no recibe clics ni el paso del mouse
+        if (!active) Box(Modifier.fillMaxSize().pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial).changes.forEach { it.consume() }
+            }
+        })
     }
 }
 

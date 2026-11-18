@@ -92,6 +92,38 @@ half4 main(float2 p) {
 }
 """
 
+    /** Telón de terciopelo dibujado por la tarjeta gráfica: nítido a cualquier tamaño de pantalla. */
+    private const val CURTAIN = """
+uniform float2 res;
+uniform float hz;
+half4 main(float2 p) {
+    float x = p.x / res.x;
+    float y = clamp(p.y / hz, 0.0, 1.0);
+    float warp = 0.018 * sin(x * 9.0 + 1.3) + 0.011 * sin(x * 23.0 + 0.4) + 0.006 * sin(x * 51.0 + 2.0);
+    float dens = 26.0 * (res.x / 1440.0) * (1.0 + 0.10 * (1.0 - y));
+    float u = (x + warp * (0.7 + 0.6 * y)) * dens;
+    float s = sin(u * 6.2831853);
+    float s2 = sin(u * 12.5663706 + 1.1) * 0.25;
+    float fold = clamp(0.5 + 0.5 * (s * 0.82 + s2), 0.0, 1.0);
+    float diffuse = 0.10 + 0.9 * pow(fold, 1.6);
+    float sheen = pow(fold, 9.0) * 0.55;
+    float fib = (sin(p.x * 2.7) + sin(p.x * 1.31 + 3.0) + sin(p.x * 0.53)) / 3.0 * 0.04;
+    float3 deep = float3(0.20, 0.008, 0.012);
+    float3 mid = float3(0.62, 0.04, 0.05);
+    float3 hi = float3(0.95, 0.30, 0.24);
+    float3 col = deep + (mid - deep) * diffuse + (hi - mid) * sheen + mid * fib;
+    float dx = (x - 0.4) / 0.45;
+    float dy = y / 0.9;
+    float spot = exp(-(dx * dx + dy * dy));
+    col *= 0.45 + 0.75 * spot;
+    col *= 1.0 - 0.35 * y * y;
+    col = pow(clamp(col, 0.0, 1.0), float3(0.909));
+    return half4(half3(col), 1.0);
+}
+"""
+
+    val curtain: RuntimeEffect? by lazy { try { RuntimeEffect.makeForShader(CURTAIN) } catch (t: Throwable) { System.err.println(t); null } }
+
     val floor: RuntimeEffect? by lazy { try { RuntimeEffect.makeForShader(FLOOR) } catch (t: Throwable) { System.err.println(t); null } }
     val light: RuntimeEffect? by lazy { try { RuntimeEffect.makeForShader(LIGHT) } catch (t: Throwable) { System.err.println(t); null } }
 }
@@ -169,7 +201,7 @@ private fun DrawScope.drawRoomStatic(horizon: Float, pool: Offset, dim: Float) {
     val lightFx = Shaders.light
     val hz = size.height * horizon
     drawRect(C.Sombra)
-    drawCover(Res.telon, topLeft = Offset.Zero, w = size.width, h = hz + 2, anchorY = 0.35f)
+    drawCurtain(Size(size.width, hz + 2))
     drawRect(Brush.verticalGradient(0f to Color(0x55000000), 0.55f to Color(0x00000000), 1f to Color(0xCC000000), endY = hz))
     if (floorFx != null) {
         val b = RuntimeShaderBuilder(floorFx)
@@ -194,4 +226,15 @@ private fun DrawScope.drawRoomStatic(horizon: Float, pool: Offset, dim: Float) {
         center = Offset(size.width * pool.x, size.height * 0.55f), radius = size.maxDimension * 0.75f,
     ))
     if (dim > 0f) drawRect(Color.Black.copy(alpha = dim))
+}
+
+/** Pinta el telón en el área [area] desde arriba a la izquierda (con la foto de respaldo si no hay shader). */
+fun DrawScope.drawCurtain(area: Size) {
+    val fx = Shaders.curtain
+    if (fx != null) {
+        val b = RuntimeShaderBuilder(fx)
+        b.uniform("res", area.width, area.height)
+        b.uniform("hz", area.height)
+        drawRect(ShaderBrush(b.makeShader()), size = area)
+    } else drawCover(Res.telon, topLeft = Offset.Zero, w = area.width, h = area.height, anchorY = 0.35f)
 }

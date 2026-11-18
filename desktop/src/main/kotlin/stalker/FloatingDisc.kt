@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.window.WindowDraggableArea
@@ -72,6 +72,14 @@ fun FloatingDisc(app: AppState, icon: BitmapPainter, onRestore: () -> Unit) {
         alwaysOnTop = true,
         focusable = false,
     ) {
+        // recorte real de la ventana: solo el disco y la etiqueta con el nombre (nada de cuadro detrás)
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            try {
+                val area = java.awt.geom.Area(java.awt.geom.Ellipse2D.Float(10f, 10f, 212f, 212f))
+                area.add(java.awt.geom.Area(java.awt.geom.RoundRectangle2D.Float(6f, 232f, 220f, 50f, 28f, 28f)))
+                window.shape = area
+            } catch (_: Throwable) {}
+        }
         DisposableEffect(Unit) {
             onDispose {
                 Prefs.floatX = window.x
@@ -131,12 +139,13 @@ fun FloatingDisc(app: AppState, icon: BitmapPainter, onRestore: () -> Unit) {
                     }
                 }
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(10.dp))
             if (t != null) {
                 Column(
-                    Modifier.widthIn(max = 220.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xE60E0907))
+                    Modifier.width(220.dp).height(50.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xE60E0907))
                         .border(1.dp, Color(0x26F1DFC4), RoundedCornerShape(14.dp)).padding(horizontal = 12.dp, vertical = 7.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                 ) {
                     androidx.compose.foundation.text.BasicText(t.title, style = txt(12.sp, FontWeight.SemiBold).copy(textAlign = TextAlign.Center), maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)

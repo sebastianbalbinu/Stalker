@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -418,7 +419,7 @@ fun AlbumGrid(app: AppState) {
     LazyVerticalGrid(
         GridCells.Adaptive(178.dp),
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 40.dp, end = 64.dp, top = 18.dp, bottom = 30.dp),
+        contentPadding = PaddingValues(start = 40.dp, end = 64.dp, top = 70.dp, bottom = 30.dp),
         horizontalArrangement = Arrangement.spacedBy(30.dp),
         verticalArrangement = Arrangement.spacedBy(34.dp),
     ) {
@@ -546,7 +547,7 @@ fun WoodWall(modifier: Modifier) {
             ))
             // cortina roja arriba
             val vh = 64.dp.toPx()
-            drawCover(Res.telon, topLeft = Offset.Zero, w = size.width, h = vh, anchorY = 0.2f)
+            drawCurtain(Size(size.width, vh))
             drawRect(Brush.verticalGradient(listOf(Color(0x55000000), Color(0x00000000), Color(0x99000000)), endY = vh), size = size.copy(height = vh))
             drawRect(Brush.verticalGradient(listOf(Color(0xAA000000), Color(0x00000000)), startY = vh, endY = vh + 26.dp.toPx()),
                 topLeft = Offset(0f, vh), size = size.copy(height = 26.dp.toPx()))
