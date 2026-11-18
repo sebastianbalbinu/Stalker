@@ -159,7 +159,7 @@ fun NowPanel(app: AppState, modifier: Modifier) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Ico.Speaker, C.Tenue, 15.dp)
                 Spacer(Modifier.width(10.dp))
-                ThinSlider(p.volume, { p.setVolume(it) }, Modifier.weight(1f))
+                ThinSlider(p.volume, { p.changeVolume(it) }, Modifier.weight(1f))
                 Spacer(Modifier.width(10.dp))
                 T("${(p.volume * 100).toInt()} %", 11, color = C.Tenue, modifier = Modifier.width(38.dp))
             }

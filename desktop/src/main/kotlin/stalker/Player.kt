@@ -188,19 +188,19 @@ class Player {
         }
     }
 
-    fun setVolume(v: Float) {
+    fun changeVolume(v: Float) {
         volume = v.coerceIn(0f, 1f)
         Prefs.volume = volume
         Audio.lib?.sa_volume(volume)
     }
 
-    fun setExclusive(on: Boolean) {
+    fun changeExclusive(on: Boolean) {
         exclusive = on
         Prefs.exclusive = on
         reload()
     }
 
-    fun setDevice(i: Int) {
+    fun changeDevice(i: Int) {
         device = i
         Prefs.device = i
         reload()

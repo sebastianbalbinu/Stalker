@@ -230,8 +230,8 @@ private fun handleKey(app: AppState, e: androidx.compose.ui.input.key.KeyEvent, 
         Key.Spacebar -> p.toggle()
         Key.DirectionRight -> if (e.isCtrlPressed) p.next() else p.seekBy(if (e.isShiftPressed) 1000 else 5000)
         Key.DirectionLeft -> if (e.isCtrlPressed) p.prev() else p.seekBy(if (e.isShiftPressed) -1000 else -5000)
-        Key.DirectionUp -> p.setVolume(p.volume + 0.05f)
-        Key.DirectionDown -> p.setVolume(p.volume - 0.05f)
+        Key.DirectionUp -> p.changeVolume(p.volume + 0.05f)
+        Key.DirectionDown -> p.changeVolume(p.volume - 0.05f)
         Key.F -> {
             app.immersive = !app.immersive
             app.view = View.Sala
@@ -404,13 +404,13 @@ fun SettingsSheet(app: AppState) {
                     "Modo exclusivo · bit-perfect",
                     "Stalker toma el DAC solo para sí y lo pone a la frecuencia exacta de cada archivo. Al pausar, lo suelta para que el resto del PC suene.",
                     p.exclusive,
-                ) { p.setExclusive(it) }
+                ) { p.changeExclusive(it) }
                 Spacer(Modifier.height(14.dp))
                 T("Dispositivo", 12, FontWeight.Medium, C.Tenue)
                 Spacer(Modifier.height(8.dp))
-                DeviceOption("Predeterminado de Windows", p.device == -1) { p.setDevice(-1) }
+                DeviceOption("Predeterminado de Windows", p.device == -1) { p.changeDevice(-1) }
                 devices.forEachIndexed { i, (name, def) ->
-                    DeviceOption(name + if (def) "  ·  actual" else "", p.device == i) { p.setDevice(i) }
+                    DeviceOption(name + if (def) "  ·  actual" else "", p.device == i) { p.changeDevice(i) }
                 }
                 Spacer(Modifier.height(10.dp))
                 SignalChain(p)
