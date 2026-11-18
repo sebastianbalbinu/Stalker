@@ -132,7 +132,7 @@ private data class Spot(val track: Int, val ms: Long, val albumMs: Long, val sna
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, tilt: Float = 9f) {
+fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, tilt: Float = 9f, active: Boolean = true) {
     val queue = player.queue
     val total = player.albumDurationMs.coerceAtLeast(1)
     val bounds = remember(queue) {
@@ -173,7 +173,8 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
     // giro del plato con arranque y frenado suaves
     var spin by remember { mutableFloatStateOf(0f) }
     var speed by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(player.playing) {
+    LaunchedEffect(player.playing, active) {
+        if (!active) return@LaunchedEffect // fuera de cámara el plato no se anima: la ventana descansa
         var last = 0L
         while (true) {
             val target = if (player.playing) 200f else 0f // 33⅓ rpm = 200°/s

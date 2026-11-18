@@ -272,6 +272,7 @@ fun main(args: Array<String>) {
             MainWindow(app, this, mainState)
         }
 
+        LaunchedEffect(mainState.isMinimized, app.mini) { player.background = mainState.isMinimized || app.mini }
         if (app.mini) MiniWindow(app, icon)
         if (mainState.isMinimized && !app.mini && app.floatDisc && player.queue.isNotEmpty()) {
             FloatingDisc(app, icon) {
@@ -331,9 +332,13 @@ private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.comp
 
     Box(Modifier.fillMaxSize().background(C.Sombra)) {
         // las dos vistas quedan vivas: cambiar es solo un fundido entre imágenes ya pintadas
-        val sala = androidx.compose.animation.core.animateFloatAsState(if (app.view == View.Sala) 1f else 0f, tween(320))
-        KeptView(sala, app.view == View.Sala) { SalaScreen(app) }
-        KeptView(remember { derivedStateOf { 1f - sala.value } }, app.view == View.Shelf) { ShelfScreen(app) }
+        // una sola sala y una cámara: va del tocadiscos a la estantería con un desenfoque de foco
+        val cam = androidx.compose.animation.core.animateFloatAsState(
+            if (app.view == View.Shelf) 1f else 0f,
+            tween(620, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        )
+        KeptView(cam, side = -1f, active = app.view == View.Sala) { SalaScreen(app) }
+        KeptView(cam, side = 1f, active = app.view == View.Shelf) { ShelfScreen(app) }
 
         // barra superior
         if (!app.immersive) {
@@ -405,11 +410,26 @@ private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.comp
     }
 }
 
+/**
+ * Una vista de la sala vista por la cámara. [side] -1 = tocadiscos (a la izquierda), 1 = estantería.
+ * Mientras la cámara viaja, la vista que se va se desenfoca y la que llega entra en foco.
+ * Solo hay desenfoque durante el viaje (medio segundo); quietas, son imágenes ya pintadas.
+ */
 @Composable
-private fun KeptView(alpha: androidx.compose.runtime.State<Float>, active: Boolean, content: @Composable () -> Unit) {
-    Box(Modifier.fillMaxSize().zIndex(if (active) 1f else 0f).graphicsLayer { this.alpha = alpha.value }) {
+private fun KeptView(cam: androidx.compose.runtime.State<Float>, side: Float, active: Boolean, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().zIndex(if (active) 1f else 0f).graphicsLayer {
+        val c = cam.value
+        // 0 cuando esta vista está en foco, 1 cuando la cámara mira la otra
+        val away = if (side < 0) c else 1f - c
+        translationX = side * away * size.width * 0.32f
+        val sc = 1f + away * 0.10f
+        scaleX = sc; scaleY = sc
+        alpha = if (side < 0) 1f else (1f - away)
+        val blur = away * 22f
+        renderEffect = if (!Prefs.lite && blur > 0.5f && blur < 21.5f) androidx.compose.ui.graphics.BlurEffect(blur, blur, androidx.compose.ui.graphics.TileMode.Clamp) else null
+    }) {
         content()
-        // la vista escondida no recibe clics ni el paso del mouse
+        // la vista que no está en foco no recibe clics ni el paso del mouse
         if (!active) Box(Modifier.fillMaxSize().pointerInput(Unit) {
             awaitPointerEventScope {
                 while (true) awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial).changes.forEach { it.consume() }

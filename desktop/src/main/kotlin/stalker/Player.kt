@@ -41,6 +41,8 @@ class Player {
     var device by mutableIntStateOf(Prefs.device); private set
     /** Sube cada vez que el usuario baja la aguja: dispara la animación del brazo. */
     var drops by mutableIntStateOf(0); private set
+    /** Minimizada: la posición se actualiza menos seguido (el audio no cambia). */
+    @Volatile var background = false
 
     val available get() = Audio.lib != null
     val current: Track? get() = queue.getOrNull(index)
@@ -255,7 +257,7 @@ class Player {
         val info = IntArray(12)
         var saveCounter = 0
         while (scope.isActive) {
-            delay(40)
+            delay(if (background) 200 else 40)
             val l = Audio.lib ?: continue
             if (!loaded) continue
             l.sa_info(info)

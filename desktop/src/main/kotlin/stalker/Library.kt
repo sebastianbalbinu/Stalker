@@ -234,7 +234,7 @@ object Art {
         return img
     }
 
-    private fun bytes(path: String): ByteArray? {
+    fun bytes(path: String): ByteArray? {
         try {
             val tag = AudioFileIO.read(File(path)).tag
             val b = tag?.firstArtwork?.binaryData

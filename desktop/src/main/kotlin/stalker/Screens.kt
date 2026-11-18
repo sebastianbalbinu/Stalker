@@ -78,11 +78,11 @@ fun SalaScreen(app: AppState) {
     val p = app.player
     val art = rememberArt(p.current?.path)
     Box(Modifier.fillMaxSize()) {
-        RoomBackdrop(Modifier.fillMaxSize(), horizon = 0.64f, pool = Offset(if (app.immersive) 0.5f else 0.36f, 0.84f), animate = p.playing)
+        RoomBackdrop(Modifier.fillMaxSize(), horizon = 0.64f, pool = Offset(if (app.immersive) 0.5f else 0.36f, 0.84f), animate = p.playing && app.view == View.Sala)
         Row(Modifier.fillMaxSize().padding(top = 58.dp, start = 34.dp, end = if (app.immersive) 34.dp else 22.dp, bottom = 26.dp)) {
             BoxWithConstraints(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                 val dw = min(maxWidth.value * 0.97f, maxHeight.value / Deck.H * 0.9f).dp
-                Turntable(p, art, Modifier.width(dw))
+                Turntable(p, art, Modifier.width(dw), active = app.view == View.Sala)
                 if (p.queue.isEmpty()) {
                     Column(
                         Modifier.align(Alignment.Center).offset(x = -(dw * 0.115f), y = -(dw * 0.02f)),
@@ -338,7 +338,9 @@ fun Equalizer(modifier: Modifier) {
 @Composable
 fun ShelfScreen(app: AppState) {
     Box(Modifier.fillMaxSize()) {
-        WoodWall(Modifier.fillMaxSize())
+        val shelf3d = app.shelfMode == 0 || app.shelfMode == 1
+        if (shelf3d) RoomBackdrop(Modifier.fillMaxSize(), horizon = 0.80f, pool = Offset(0.5f, 0.9f), animate = false)
+        else WoodWall(Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize().padding(top = 58.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 40.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -353,14 +355,20 @@ fun ShelfScreen(app: AppState) {
                 }
                 SearchBox(app)
                 Spacer(Modifier.width(12.dp))
-                Pill("Discos", { app.shelfMode = 0 }, active = app.shelfMode == 0)
+                Pill("Estantería", { app.shelfMode = 0 }, active = app.shelfMode == 0)
                 Spacer(Modifier.width(6.dp))
                 Pill("Favoritos", { app.shelfMode = 1 }, active = app.shelfMode == 1)
+                Spacer(Modifier.width(6.dp))
+                Pill("Portadas", { app.shelfMode = 3 }, active = app.shelfMode == 3)
                 Spacer(Modifier.width(6.dp))
                 Pill("Canciones", { app.shelfMode = 2 }, active = app.shelfMode == 2)
             }
             Box(Modifier.weight(1f)) {
-                if (app.shelfMode == 2) SongList(app) else AlbumGrid(app)
+                when {
+                    app.shelfMode == 2 -> SongList(app)
+                    shelf3d && app.albums.isNotEmpty() -> Shelf3D(app)
+                    else -> AlbumGrid(app)
+                }
             }
             if (app.player.queue.isNotEmpty()) NowBar(app)
         }
