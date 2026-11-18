@@ -73,6 +73,8 @@ object Ico {
     val Check = build("check", "M5 12.5l4.5 4.5L19 7.5" to true)
     val Trash = build("trash", "M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13" to true)
     val Hide = build("hide", "M3 3l18 18M10.6 6.1A9.8 9.8 0 0 1 12 6c5 0 9 6 9 6a15.7 15.7 0 0 1-2.6 3.2M6.3 7.6C4.2 9.1 3 12 3 12s4 6 9 6a8.6 8.6 0 0 0 3.9-.9" to true)
+    val Turntable = build("turntable", circle(10.5f, 13f, 7.5f) + " " + circle(10.5f, 13f, 1.6f) + " M19.5 3.5v8.5l-4 4.5" to true)
+    val Grip = build("grip", "M5 9h14M5 15h14" to true)
     val Disc = build("disc", circle(12f, 12f, 8.5f) + " " + circle(12f, 12f, 2.5f) to true)
     val Pencil = build("pencil", "M4 20h4L19 9l-4-4L4 16z M13.5 6.5l4 4" to true)
     val Moon = build("moon", "M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" to true)

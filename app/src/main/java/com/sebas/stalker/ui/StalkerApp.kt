@@ -332,7 +332,7 @@ fun MiniPlayer(t: Track, playing: Boolean, onOpen: () -> Unit, onToggle: () -> U
 @Composable
 fun NavBar(tab: Int, onTab: (Int) -> Unit) {
     val items = listOf(
-        Triple(0, Ico.Play, "Reproduciendo"),
+        Triple(0, Ico.Turntable, "Tocadiscos"),
         Triple(1, Ico.Library, "Biblioteca"),
         Triple(2, Ico.Sliders, "Ecualizador"),
         Triple(3, Ico.Gear, "Sistema"),
@@ -346,14 +346,17 @@ fun NavBar(tab: Int, onTab: (Int) -> Unit) {
     ) {
         items.forEach { (id, icon, label) ->
             val on = id == tab
-            Box(
-                Modifier.weight(1f).padding(horizontal = 4.dp).height(46.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (on) C.Rojo else Color.Transparent)
+            // seleccionado: ícono en rojo con un punto debajo, como el piloto de un equipo de audio
+            Column(
+                Modifier.weight(1f).padding(horizontal = 4.dp).height(52.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .clickable { onTab(id) },
-                contentAlignment = Alignment.Center
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Icon(icon, label, tint = if (on) C.SobreRojo else C.Carbon, modifier = Modifier.size(23.dp))
+                Icon(icon, label, tint = if (on) C.Rojo else C.Tierra, modifier = Modifier.size(if (on) 25.dp else 23.dp))
+                Spacer(Modifier.height(5.dp))
+                Box(Modifier.size(5.dp).clip(CircleShape).background(if (on) C.Rojo else Color.Transparent))
             }
         }
     }

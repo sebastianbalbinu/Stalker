@@ -257,7 +257,7 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
     }
 
     if (showQueue) {
-        QueueSheet(queueTitle, queue, index, onPick = { vm.jumpTo(it) }, onRemove = { vm.removeFromQueue(it) }, onDismiss = { showQueue = false })
+        QueueSheet(queueTitle, queue, index, onPick = { vm.jumpTo(it) }, onRemove = { vm.removeFromQueue(it) }, onMove = { f, t -> vm.moveInQueue(f, t) }, onDismiss = { showQueue = false })
     }
     if (showTimer) TimerSheet { showTimer = false }
     if (showLyrics) {

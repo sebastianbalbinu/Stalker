@@ -1,5 +1,15 @@
 package com.sebas.stalker.ui
 
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -175,48 +185,113 @@ fun AddToDiscoSheet(trackIds: List<Long>, onDismiss: () -> Unit) {
     }
 }
 
-/** Lista de pistas del disco que suena, separada en Lado A y Lado B. */
+/**
+ * Lista de pistas del disco que suena, separada en Lado A y Lado B.
+ * Se reordena arrastrando la manija de la derecha.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun QueueSheet(title: String?, queue: List<Track>, index: Int, onPick: (Int) -> Unit, onRemove: (Int) -> Unit, onDismiss: () -> Unit) {
-    val half = (queue.size + 1) / 2
+fun QueueSheet(
+    title: String?, queue: List<Track>, index: Int,
+    onPick: (Int) -> Unit, onRemove: (Int) -> Unit, onMove: (Int, Int) -> Unit, onDismiss: () -> Unit,
+) {
+    // copia local con llaves estables para que la fila arrastrada no se pierda
+    val rows = remember(queue) { mutableStateListOf<Pair<Int, Track>>().apply { addAll(queue.mapIndexed { i, t -> i to t }) } }
+    var dragKey by remember { mutableStateOf<Int?>(null) }
+    var dragFrom by remember { mutableIntStateOf(-1) }
+    var dy by remember { mutableFloatStateOf(0f) }
+    var rowH by remember { mutableFloatStateOf(1f) }
+    val haptic = LocalHapticFeedback.current
+    val half = (rows.size + 1) / 2
     StalkerSheet(onDismiss) {
         Text(title ?: "En el tocadiscos", style = Titulo.copy(fontSize = 24.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text("${queue.size} pistas", style = Secundario)
+        Text("${queue.size} pistas · arrastra ≡ para cambiar el orden", style = Secundario)
         Spacer(Modifier.height(10.dp))
         LazyColumn(Modifier.heightIn(max = 520.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
-            itemsIndexed(queue) { i, t ->
-                if (i == 0 || i == half) {
-                    Text(
-                        if (i == 0) "LADO A" else "LADO B",
-                        style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold),
-                        modifier = Modifier.padding(top = 14.dp, bottom = 6.dp)
-                    )
-                }
-                val on = i == index
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                        .background(if (on) C.Arena else Color.Transparent)
-                        .clickable { onPick(i); onDismiss() }
-                        .padding(horizontal = 10.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            itemsIndexed(rows, key = { _, r -> r.first }) { i, (key, t) ->
+                val dragging = dragKey == key
+                Column(
+                    Modifier
+                        .then(if (dragging) Modifier else Modifier.animateItem())
+                        .zIndex(if (dragging) 1f else 0f)
+                        .graphicsLayer {
+                            translationY = if (dragging) dy else 0f
+                            shadowElevation = if (dragging) 16f else 0f
+                        }
                 ) {
-                    Text(
-                        "%02d".format(i + 1), modifier = Modifier.width(30.dp),
-                        style = Secundario.copy(fontSize = 12.sp, color = if (on) C.Rojo else C.Tierra)
-                    )
-                    Column(Modifier.weight(1f)) {
+                    if (dragKey == null && (i == 0 || i == half) && rows.size > 1) {
                         Text(
-                            t.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = Cuerpo.copy(color = if (on) C.Rojo else C.Carbon, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                            if (i == 0) "LADO A" else "LADO B",
+                            style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold),
+                            modifier = Modifier.padding(top = 14.dp, bottom = 6.dp)
                         )
-                        Text(t.artist, style = Secundario.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    Text(fmtTime(t.durationMs), style = Secundario.copy(fontSize = 12.sp))
-                    if (!on) {
+                    val on = key == index
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                            .background(if (dragging) C.Tarjeta else if (on) C.Arena else Color.Transparent)
+                            .onSizeChanged { rowH = it.height.toFloat().coerceAtLeast(1f) }
+                            .clickable(enabled = dragKey == null) { onPick(i); onDismiss() }
+                            .padding(start = 10.dp, top = 8.dp, bottom = 8.dp, end = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "%02d".format(i + 1), modifier = Modifier.width(30.dp),
+                            style = Secundario.copy(fontSize = 12.sp, color = if (on) C.Rojo else C.Tierra)
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                t.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                style = Cuerpo.copy(color = if (on) C.Rojo else C.Carbon, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                            )
+                            Text(t.artist, style = Secundario.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text(fmtTime(t.durationMs), style = Secundario.copy(fontSize = 12.sp))
+                        if (!on) {
+                            Box(
+                                Modifier.padding(start = 4.dp).size(36.dp).clip(CircleShape).clickable(enabled = dragKey == null) {
+                                    rows.removeAt(i)
+                                    onRemove(i)
+                                },
+                                contentAlignment = Alignment.Center
+                            ) { Icon(Ico.Close, "Quitar de la cola", tint = C.Tierra, modifier = Modifier.size(16.dp)) }
+                        } else Spacer(Modifier.width(40.dp))
+                        // manija para arrastrar
                         Box(
-                            Modifier.padding(start = 6.dp).size(36.dp).clip(CircleShape).clickable { onRemove(i) },
+                            Modifier.size(44.dp).pointerInput(key) {
+                                detectDragGestures(
+                                    onDragStart = {
+                                        dragKey = key
+                                        dragFrom = rows.indexOfFirst { it.first == key }
+                                        dy = 0f
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    },
+                                    onDrag = { ch, amount ->
+                                        ch.consume()
+                                        dy += amount.y
+                                        val pos = rows.indexOfFirst { it.first == key }
+                                        if (dy > rowH * 0.55f && pos < rows.lastIndex) {
+                                            rows.add(pos + 1, rows.removeAt(pos)); dy -= rowH
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        } else if (dy < -rowH * 0.55f && pos > 0) {
+                                            rows.add(pos - 1, rows.removeAt(pos)); dy += rowH
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        val to = rows.indexOfFirst { it.first == key }
+                                        if (dragFrom >= 0 && to >= 0 && to != dragFrom) onMove(dragFrom, to)
+                                        dragKey = null; dy = 0f; dragFrom = -1
+                                    },
+                                    onDragCancel = {
+                                        val to = rows.indexOfFirst { it.first == key }
+                                        if (dragFrom >= 0 && to >= 0 && to != dragFrom) onMove(dragFrom, to)
+                                        dragKey = null; dy = 0f; dragFrom = -1
+                                    },
+                                )
+                            },
                             contentAlignment = Alignment.Center
-                        ) { Icon(Ico.Close, "Quitar de la cola", tint = C.Tierra, modifier = Modifier.size(16.dp)) }
+                        ) { Icon(Ico.Grip, "Mover", tint = if (dragging) C.Rojo else C.Tierra, modifier = Modifier.size(20.dp)) }
                     }
                 }
             }

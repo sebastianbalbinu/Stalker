@@ -141,6 +141,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         else c.addMediaItems(tracks.map { Engine.mediaItem(it) })
     }
 
+    /** Cambia el orden de la cola sin cortar lo que suena. */
+    fun moveInQueue(from: Int, to: Int) {
+        val c = controller ?: return
+        val n = c.mediaItemCount
+        if (from == to || from !in 0 until n || to !in 0 until n) return
+        c.moveMediaItem(from, to)
+    }
+
     fun removeFromQueue(i: Int) {
         val c = controller ?: return
         if (i in 0 until c.mediaItemCount && i != c.currentMediaItemIndex) c.removeMediaItem(i)
