@@ -355,11 +355,11 @@ fun ShelfScreen(app: AppState) {
                 }
                 SearchBox(app)
                 Spacer(Modifier.width(12.dp))
-                Pill("Estantería", { app.shelfMode = 0 }, active = app.shelfMode == 0)
+                Pill("Estantería", { app.shelfMode = 0; Prefs.shelfMode = 0 }, active = app.shelfMode == 0)
                 Spacer(Modifier.width(6.dp))
                 Pill("Favoritos", { app.shelfMode = 1 }, active = app.shelfMode == 1)
                 Spacer(Modifier.width(6.dp))
-                Pill("Portadas", { app.shelfMode = 3 }, active = app.shelfMode == 3)
+                Pill("Portadas", { app.shelfMode = 3; Prefs.shelfMode = 3 }, active = app.shelfMode == 3)
                 Spacer(Modifier.width(6.dp))
                 Pill("Canciones", { app.shelfMode = 2 }, active = app.shelfMode == 2)
             }

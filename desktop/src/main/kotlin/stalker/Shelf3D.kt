@@ -205,9 +205,11 @@ fun Shelf3D(app: AppState, modifier: Modifier = Modifier) {
     val pan by animateFloatAsState(unit.toFloat(), tween(650, easing = FastOutSlowInEasing))
     val tm = rememberTextMeasurer()
     var pulled by remember { mutableStateOf<Pulled?>(null) }
+    var peek by remember { mutableStateOf<Pair<Album, Rect>?>(null) }
+    var origin by remember { mutableStateOf(Offset.Zero) }
     val nowKey = app.player.queue.firstOrNull()?.albumKey
 
-    BoxWithConstraints(modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier.fillMaxSize().onGloballyPositioned { origin = it.boundsInRoot().topLeft }) {
         val availW = maxWidth.value
         val availH = maxHeight.value
         val cabW = min(availW * 0.78f, availH * 0.66f / Cab.H)
@@ -251,6 +253,7 @@ fun Shelf3D(app: AppState, modifier: Modifier = Modifier) {
                         Cubby(
                             items, tm, q, nowKey, app.favorites, app.shelfMode == 1,
                             Modifier.offset(r.left.dp, r.top.dp).size(r.width.dp, r.height.dp),
+                            onHover = { a, rect -> peek = if (a == null || a.key == nowKey) null else a to rect },
                         ) { a, rect -> if (a.key == nowKey) app.view = View.Sala else pulled = Pulled(a, rect) }
                     }
                     // en exhibición sobre el mueble: lo que suena o el último que llegó
@@ -278,6 +281,9 @@ fun Shelf3D(app: AppState, modifier: Modifier = Modifier) {
                 }
             }
         }
+
+        // vista previa: al pasar el mouse por un lomo aparece su portada encima
+        peek?.let { (a, r) -> if (pulled == null) Peek(a, r, origin, maxWidth.value) }
 
         pulled?.let { p ->
             PulledOut(app, p, Modifier.fillMaxSize()) { pulled = null }
@@ -361,9 +367,10 @@ private fun DrawScope.drawCabinet(w: Float, back: ImageBitmap, plank: ImageBitma
 @Composable
 private fun Cubby(
     items: List<Album>, tm: TextMeasurer, q: String, nowKey: String?, favs: Set<String>, onlyFavs: Boolean,
-    modifier: Modifier, onPull: (Album, Rect) -> Unit,
+    modifier: Modifier, onHover: (Album?, Rect) -> Unit, onPull: (Album, Rect) -> Unit,
 ) {
     var hoverX by remember { mutableStateOf<Float?>(null) }
+    var lastHover by remember { mutableIntStateOf(-1) }
     val focus = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     var bounds by remember { mutableStateOf(Rect.Zero) }
@@ -379,16 +386,29 @@ private fun Cubby(
                         val ch = e.changes.firstOrNull() ?: continue
                         when (e.type) {
                             PointerEventType.Enter, PointerEventType.Move -> {
-                                if (hoverX == null) scope.launch { focus.animateTo(1f, tween(220)) }
-                                hoverX = ch.position.x / size.width
+                                if (hoverX == null) scope.launch { focus.animateTo(1f, tween(200)) }
+                                val hh = size.height.toFloat()
+                                val ww = size.width.toFloat()
+                                // los discos recostados se enderezan al pasar el mouse; se corrige la inclinación que quede
+                                val l0 = layoutSpines(items.size, ww, hh, null, focus.value)
+                                hoverX = (ch.position.x + l0.lean * (hh - ch.position.y)) / ww
+                                val l = layoutSpines(items.size, ww, hh, hoverX, focus.value)
+                                val i = l.indexAt(hoverX!! * ww)
+                                if (i != lastHover) {
+                                    lastHover = i
+                                    if (i in items.indices) onHover(items[i], Rect(Offset(bounds.left + l.x[i], bounds.top), Size(l.w[i], bounds.height)))
+                                    else onHover(null, Rect.Zero)
+                                }
                             }
                             PointerEventType.Exit -> {
+                                lastHover = -1
+                                onHover(null, Rect.Zero)
                                 scope.launch { focus.animateTo(0f, tween(260)); hoverX = null }
                             }
                             PointerEventType.Press -> {
                                 val hh = size.height.toFloat()
                                 val l = layoutSpines(items.size, size.width.toFloat(), hh, hoverX, focus.value)
-                                val i = l.indexAt(ch.position.x + l.lean * (hh - ch.position.y))
+                                val i = if (hoverX != null) l.indexAt(hoverX!! * size.width) else l.indexAt(ch.position.x + l.lean * (hh - ch.position.y))
                                 if (i in items.indices) {
                                     val sx = l.x[i]
                                     onPull(items[i], Rect(Offset(bounds.left + sx, bounds.top), Size(l.w[i], bounds.height)))
@@ -493,11 +513,49 @@ private fun layoutSpines(n: Int, width: Float, height: Float, hover: Float?, foc
     val total = w.sum()
     // si no se llena el cubo, los discos se recuestan; el ángulo depende del espacio libre
     val free = width * 0.96f - n * base
-    val lean = if (n in 1 until PER_CUBBY - 2) (free / width).coerceIn(0f, 1f).let { f -> (sqrt(f) * 0.42f).coerceAtMost(0.38f) } else 0f
+    val leanBase = if (n in 1 until PER_CUBBY - 2) (free / width).coerceIn(0f, 1f).let { f -> (sqrt(f) * 0.30f).coerceAtMost(0.26f) } else 0f
+    val lean = leanBase * (1f - focus)
     val x = FloatArray(n)
     var acc = if (total > width) (width - total) * ((hover ?: 0.5f).coerceIn(0f, 1f)) else width * 0.02f + lean * height * 0.93f
     for (i in 0 until n) { x[i] = acc; acc += w[i] }
     return SpineLayout(x, w, lift, lean)
+}
+
+/* ------------------------------------------------------------------ vista previa */
+
+@Composable
+private fun Peek(a: Album, spine: Rect, origin: Offset, maxW: Float) {
+    val art = rememberArt(a.cover)
+    val k = remember(a.key) { Animatable(0f) }
+    LaunchedEffect(a.key) { k.animateTo(1f, tween(180, easing = FastOutSlowInEasing)) }
+    val d = androidx.compose.ui.platform.LocalDensity.current.density
+    val card = 168f
+    val cx = (spine.center.x - origin.x) / d
+    val x = (cx - card / 2).coerceIn(8f, maxW - card - 8f)
+    val y = (spine.top - origin.y) / d - card - 64f
+    Column(
+        Modifier.offset(x.dp, y.coerceAtLeast(4f).dp).width(card.dp).graphicsLayer {
+            alpha = k.value
+            translationY = (1f - k.value) * 10.dp.toPx()
+            scaleX = 0.94f + 0.06f * k.value; scaleY = scaleX
+        },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(card.dp).graphicsLayer {
+            shadowElevation = 22.dp.toPx(); shape = RoundedCornerShape(3.dp); clip = true
+        }) {
+            if (art != null) Canvas(Modifier.fillMaxSize()) { drawCover(art) } else Cover(a.cover, Modifier.fillMaxSize(), radius = 3.dp)
+        }
+        Spacer(Modifier.height(8.dp))
+        Column(
+            Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xF0140D0B)).border(1.dp, Color(0x26F1DFC4), RoundedCornerShape(10.dp))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            T(a.title, 12, FontWeight.SemiBold)
+            T(a.artist + (if (a.year.isNotBlank()) " · ${a.year}" else ""), 10, color = C.Tenue)
+        }
+    }
 }
 
 /* ------------------------------------------------------------------ disco en exhibición */

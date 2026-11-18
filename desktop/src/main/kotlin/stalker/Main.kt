@@ -102,7 +102,7 @@ class AppState(val player: Player) {
     var mini by mutableStateOf(false)
     var immersive by mutableStateOf(false)
     var query by mutableStateOf("")
-    var shelfMode by mutableIntStateOf(0)
+    var shelfMode by mutableIntStateOf(Prefs.shelfMode)
     var typing by mutableStateOf(false)
     /** Parte de abajo del panel: 0 pistas, 1 Jam. */
     var panelTab by mutableIntStateOf(0)
@@ -523,6 +523,12 @@ fun SettingsSheet(app: AppState) {
                     "Al minimizar queda un vinilo girando sobre las demás ventanas. Pasa el mouse para pausar o cambiar de canción; doble clic para volver.",
                     app.floatDisc,
                 ) { app.floatDisc = it; Prefs.floatDisc = it }
+                Spacer(Modifier.height(14.dp))
+                Toggle(
+                    "Estantería realista",
+                    "Discos de canto en el mueble de nogal. Apágalo para ver tu música como portadas en cuadrícula, más fácil de escoger.",
+                    app.shelfMode != 3,
+                ) { v -> app.shelfMode = if (v) 0 else 3; Prefs.shelfMode = app.shelfMode }
                 Spacer(Modifier.height(14.dp))
                 Toggle(
                     "Modo ligero",

@@ -107,6 +107,9 @@ object Prefs {
     var liteAsked: Boolean
         get() = p.getBoolean("liteAsked", false)
         set(v) = p.putBoolean("liteAsked", v)
+    var shelfMode: Int
+        get() = p.getInt("shelfMode", 0)
+        set(v) = p.putInt("shelfMode", v)
     var floatDisc: Boolean
         get() = p.getBoolean("floatDisc", true)
         set(v) = p.putBoolean("floatDisc", v)
