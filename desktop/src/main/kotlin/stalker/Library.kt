@@ -93,6 +93,23 @@ object Prefs {
     var miniY: Int
         get() = p.getInt("miniY", -1)
         set(v) = p.putInt("miniY", v)
+    /** Modo ligero para PCs modestos: menos animación de fondo y menos memoria. */
+    private val liteState = androidx.compose.runtime.mutableStateOf(p.getBoolean("lite", false))
+    var lite: Boolean
+        get() = liteState.value
+        set(v) { liteState.value = v; p.putBoolean("lite", v) }
+    var floatX: Int
+        get() = p.getInt("floatX", -1)
+        set(v) = p.putInt("floatX", v)
+    var floatY: Int
+        get() = p.getInt("floatY", -1)
+        set(v) = p.putInt("floatY", v)
+    var liteAsked: Boolean
+        get() = p.getBoolean("liteAsked", false)
+        set(v) = p.putBoolean("liteAsked", v)
+    var floatDisc: Boolean
+        get() = p.getBoolean("floatDisc", true)
+        set(v) = p.putBoolean("floatDisc", v)
     var favorites: Set<String>
         get() = p.get("favorites", "").split('\n').filter { it.isNotBlank() }.toSet()
         set(v) { p.put("favorites", v.joinToString("\n").take(Preferences.MAX_VALUE_LENGTH)) }
@@ -204,13 +221,13 @@ object Library {
 /** Portadas: de la etiqueta o de cover.jpg / folder.jpg. Se reducen y se guardan en memoria. */
 object Art {
     private val mem = Collections.synchronizedMap(object : LinkedHashMap<String, ImageBitmap?>(64, 0.75f, true) {
-        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, ImageBitmap?>) = size > 160
+        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, ImageBitmap?>) = size > 90
     })
 
     fun cached(path: String): ImageBitmap? = mem[path]
     fun known(path: String) = mem.containsKey(path)
 
-    fun load(path: String, px: Int = 520): ImageBitmap? {
+    fun load(path: String, px: Int = 400): ImageBitmap? {
         if (mem.containsKey(path)) return mem[path]
         val img = try { decode(bytes(path), px) } catch (_: Throwable) { null }
         mem[path] = img

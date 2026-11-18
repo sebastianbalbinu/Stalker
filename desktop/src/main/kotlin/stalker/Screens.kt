@@ -53,6 +53,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageShader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
@@ -70,7 +77,7 @@ fun SalaScreen(app: AppState) {
     val p = app.player
     val art = rememberArt(p.current?.path)
     Box(Modifier.fillMaxSize()) {
-        RoomBackdrop(Modifier.fillMaxSize(), horizon = 0.64f, pool = Offset(if (app.immersive) 0.5f else 0.36f, 0.84f))
+        RoomBackdrop(Modifier.fillMaxSize(), horizon = 0.64f, pool = Offset(if (app.immersive) 0.5f else 0.36f, 0.84f), animate = p.playing)
         Row(Modifier.fillMaxSize().padding(top = 58.dp, start = 34.dp, end = if (app.immersive) 34.dp else 22.dp, bottom = 26.dp)) {
             BoxWithConstraints(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                 val dw = min(maxWidth.value * 0.97f, maxHeight.value / Deck.H * 0.9f).dp
@@ -137,18 +144,7 @@ fun NowPanel(app: AppState, modifier: Modifier) {
             SignalChain(p)
             Spacer(Modifier.height(18.dp))
 
-            // progreso
-            val dur = t?.durationMs ?: 0
-            ThinSlider(
-                if (dur > 0) (p.positionMs.toFloat() / dur).coerceIn(0f, 1f) else 0f,
-                onChange = {},
-                onDone = { f -> if (dur > 0) p.seek((f * dur).toLong()) },
-            )
-            Row(Modifier.fillMaxWidth()) {
-                T(fmt(p.positionMs), 11, color = C.Tenue)
-                Spacer(Modifier.weight(1f))
-                T("-" + fmt((dur - p.positionMs).coerceAtLeast(0)), 11, color = C.Tenue)
-            }
+            TrackProgress(p)
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 RoundButton(Ico.Prev, { p.prev() }, 44.dp, 18.dp)
@@ -197,6 +193,22 @@ private fun PanelTab(label: String, active: Boolean, onClick: () -> Unit) {
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 5.dp)
     ) { T(label, 11, FontWeight.Medium, if (active) C.Sombra else C.Crema) }
+}
+
+/** Solo esta parte se actualiza con el avance de la canción (el resto del panel queda quieto). */
+@Composable
+fun TrackProgress(p: Player) {
+    val dur = p.current?.durationMs ?: 0
+    ThinSlider(
+        if (dur > 0) (p.positionMs.toFloat() / dur).coerceIn(0f, 1f) else 0f,
+        onChange = {},
+        onDone = { f -> if (dur > 0) p.seek((f * dur).toLong()) },
+    )
+    Row(Modifier.fillMaxWidth()) {
+        T(fmt(p.positionMs), 11, color = C.Tenue)
+        Spacer(Modifier.weight(1f))
+        T("-" + fmt((dur - p.positionMs).coerceAtLeast(0)), 11, color = C.Tenue)
+    }
 }
 
 @Composable
@@ -325,7 +337,7 @@ fun Equalizer(modifier: Modifier) {
 @Composable
 fun ShelfScreen(app: AppState) {
     Box(Modifier.fillMaxSize()) {
-        RoomBackdrop(Modifier.fillMaxSize(), horizon = 0.93f, pool = Offset(0.5f, 0.98f), dim = 0.62f, animate = false)
+        WoodWall(Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize().padding(top = 58.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 40.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -414,43 +426,56 @@ fun AlbumGrid(app: AppState) {
     }
 }
 
-/** Funda del disco: al pasar el mouse el vinilo asoma por un lado. */
+/** Funda del disco: al pasar el mouse el vinilo sale de la funda, como cuando lo sacas para ponerlo. */
 @Composable
 fun SleeveCard(app: AppState, a: Album) {
     val src = remember { MutableInteractionSource() }
     val hovered by src.collectIsHoveredAsState()
-    val out by animateFloatAsState(if (hovered) 1f else 0f, tween(380))
+    // las animaciones se leen solo dentro de las capas: la tarjeta no se recompone en cada cuadro
+    val out = animateFloatAsState(if (hovered) 1f else 0f, tween(if (hovered) 520 else 360, easing = androidx.compose.animation.core.FastOutSlowInEasing))
     val onDeck = app.player.queue.firstOrNull()?.albumKey == a.key
     val art = rememberArt(a.cover)
     Column(Modifier.hoverable(src)) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
-            // vinilo que asoma
-            Canvas(Modifier.fillMaxSize().graphicsLayer { translationX = size.width * (0.06f + 0.26f * out) }) {
-                val r = size.minDimension * 0.48f
+            // vinilo: sube y gira un poco al salir de la funda
+            Canvas(Modifier.fillMaxSize().graphicsLayer {
+                val o = out.value
+                translationY = -size.height * 0.34f * o
+                translationX = size.width * 0.03f * o
+                rotationZ = 38f * o
+            }.drawWithCache {
+                val r = size.minDimension * 0.47f
                 val c = center
-                drawCircle(Color(0x99000000), r, c + Offset(4f, 8f))
-                drawCircle(Color(0xFF0C0B0B), r, c)
-                for (i in 0 until 18) drawCircle(Color.White.copy(alpha = 0.03f + (i % 3) * 0.012f), r * (0.4f + i * 0.033f), c, style = Stroke(0.8f))
-                drawCircle(Brush.sweepGradient(0f to Color(0x00FFFFFF), 0.1f to Color(0x1EFFFFFF), 0.2f to Color(0x00FFFFFF), 0.6f to Color(0x00FFFFFF), 0.7f to Color(0x16FFFFFF), 0.8f to Color(0x00FFFFFF), center = c), r * 0.7f, c, style = Stroke(r * 0.58f))
-                val lr = r * 0.34f
-                clipPath(Path().apply { addOval(Rect(c, lr)) }) {
-                    if (art != null) drawCover(art, topLeft = c - Offset(lr, lr), w = lr * 2, h = lr * 2) else drawCircle(C.Rojo, lr, c)
+                onDrawBehind {
+                    drawCircle(Color(0x88000000), r, c + Offset(3f, 6f))
+                    drawCircle(Color(0xFF0C0B0B), r, c)
+                    for (i in 0 until 18) drawCircle(Color.White.copy(alpha = 0.03f + (i % 3) * 0.012f), r * (0.4f + i * 0.033f), c, style = Stroke(0.8f))
+                    drawCircle(Brush.sweepGradient(0f to Color(0x00FFFFFF), 0.1f to Color(0x1EFFFFFF), 0.2f to Color(0x00FFFFFF), 0.6f to Color(0x00FFFFFF), 0.7f to Color(0x16FFFFFF), 0.8f to Color(0x00FFFFFF), center = c), r * 0.7f, c, style = Stroke(r * 0.58f))
+                    val lr = r * 0.34f
+                    clipPath(Path().apply { addOval(Rect(c, lr)) }) {
+                        if (art != null) drawCover(art, topLeft = c - Offset(lr, lr), w = lr * 2, h = lr * 2) else drawCircle(C.Rojo, lr, c)
+                    }
+                    drawCircle(C.Crema, r * 0.025f, c)
                 }
-                drawCircle(C.Crema, r * 0.025f, c)
-            }
+            }) {}
             // funda
             Box(
                 Modifier.fillMaxSize()
-                    .graphicsLayer { translationY = -6.dp.toPx() * out }
-                    .shadow((10 + 14 * out).dp, RoundedCornerShape(3.dp))
-                    .clip(RoundedCornerShape(3.dp))
+                    .graphicsLayer {
+                        val o = out.value
+                        translationY = -4.dp.toPx() * o
+                        shadowElevation = (6 + 14 * o).dp.toPx()
+                        shape = RoundedCornerShape(3.dp)
+                        clip = true
+                    }
                     .pointerHoverIcon(Hand)
                     .clickable(interactionSource = src, indication = null) { app.placeOnDeck(a) }
             ) {
                 Cover(a.cover, Modifier.fillMaxSize(), radius = 3.dp)
-                // brillo del plástico de la funda
                 Canvas(Modifier.fillMaxSize()) {
+                    // brillo del plástico y borde gastado de la funda
                     drawRect(Brush.linearGradient(listOf(Color(0x1AFFFFFF), Color(0x00FFFFFF), Color(0x00FFFFFF), Color(0x0FFFFFFF)), start = Offset.Zero, end = Offset(size.width, size.height)))
+                    drawRect(Brush.verticalGradient(listOf(Color(0x33000000), Color(0x00000000)), endY = size.height * 0.08f))
                 }
                 if (art == null) {
                     Column(Modifier.align(Alignment.BottomStart).padding(12.dp)) {
@@ -461,30 +486,34 @@ fun SleeveCard(app: AppState, a: Album) {
                 if (a.hiRes) Box(Modifier.align(Alignment.TopStart).padding(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xCC0B0706)).padding(horizontal = 6.dp, vertical = 3.dp)) {
                     T("HI-RES", 8, FontWeight.SemiBold, C.Oro, spacing = 1f)
                 }
-                if (out > 0.05f) {
+                if (hovered) {
                     RoundButton(
-                        Ico.Play, { app.playAlbum(a) }, 42.dp, 16.dp, tint = C.Sombra, filled = C.Crema.copy(alpha = out),
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp),
+                        Ico.Play, { app.playAlbum(a) }, 42.dp, 16.dp, tint = C.Sombra, filled = C.Crema,
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).graphicsLayer { alpha = out.value },
                     )
                 }
             }
         }
-        // repisa de madera oscura sobre la que descansan las fundas
+        // repisa de nogal sobre la que descansan las fundas
         Canvas(
-            Modifier.fillMaxWidth().height(16.dp).layout { m, cs ->
+            Modifier.fillMaxWidth().height(18.dp).layout { m, cs ->
                 val extra = 15.dp.roundToPx()
                 val w = cs.maxWidth + extra * 2
                 val pl = m.measure(cs.copy(minWidth = w, maxWidth = w))
                 layout(cs.maxWidth, pl.height) { pl.place(-extra, 0) }
             }
         ) {
-            val top = 5.dp.toPx()
-            drawRect(Brush.verticalGradient(listOf(Color(0xFF4A2C1D), Color(0xFF2E1A10)), endY = top), size = size.copy(height = top))
-            drawRect(Color(0x33F1DFC4), size = size.copy(height = 1f))
-            drawRect(Brush.verticalGradient(listOf(Color(0xFF1C0F09), Color(0xFF120905)), startY = top, endY = size.height * 0.75f),
-                topLeft = Offset(0f, top), size = size.copy(height = size.height * 0.75f - top))
-            drawRect(Brush.verticalGradient(listOf(Color(0x99000000), Color(0x00000000)), startY = size.height * 0.75f, endY = size.height),
-                topLeft = Offset(0f, size.height * 0.75f), size = size.copy(height = size.height * 0.25f))
+            val top = 6.dp.toPx()
+            val front = size.height * 0.78f
+            val tex = ShaderBrush(ImageShader(Res.plank, TileMode.Repeated, TileMode.Repeated))
+            drawRect(tex, size = size.copy(height = front))
+            drawRect(Brush.verticalGradient(listOf(Color(0x22FFE6C8), Color(0x00000000)), endY = top), size = size.copy(height = top))
+            drawRect(Color(0x40F1DFC4), size = size.copy(height = 1f))
+            drawRect(Brush.verticalGradient(listOf(Color(0x99000000), Color(0x66000000)), startY = top, endY = front),
+                topLeft = Offset(0f, top), size = size.copy(height = front - top))
+            drawRect(Color(0x22000000), topLeft = Offset(0f, top), size = size.copy(height = 1f))
+            drawRect(Brush.verticalGradient(listOf(Color(0xAA000000), Color(0x00000000)), startY = front, endY = size.height),
+                topLeft = Offset(0f, front), size = size.copy(height = size.height - front))
         }
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -497,6 +526,34 @@ fun SleeveCard(app: AppState, a: Album) {
         Spacer(Modifier.height(2.dp))
         T(listOfNotNull(a.artist, a.year.ifBlank { null }).joinToString(" · "), 11, color = C.Tenue)
     }
+}
+
+/** Pared de nogal con la cortina roja arriba: la estantería de la sala. Se pinta una sola vez. */
+@Composable
+fun WoodWall(modifier: Modifier) {
+    Spacer(modifier.drawWithCache {
+        val img = ImageBitmap(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
+        CanvasDrawScope().draw(this, layoutDirection, androidx.compose.ui.graphics.Canvas(img), size) {
+            drawRect(ShaderBrush(ImageShader(Res.woodBack, TileMode.Repeated, TileMode.Repeated)))
+            // luz cálida que cae desde arriba
+            drawRect(Brush.radialGradient(
+                0f to Color(0x33FFC890), 0.55f to Color(0x0AFFC890), 1f to Color(0x00000000),
+                center = Offset(size.width * 0.5f, -size.height * 0.1f), radius = size.maxDimension * 0.8f,
+            ), blendMode = BlendMode.Screen)
+            drawRect(Brush.radialGradient(
+                0f to Color(0x00000000), 0.6f to Color(0x33000000), 1f to Color(0xCC000000),
+                center = Offset(size.width * 0.5f, size.height * 0.45f), radius = size.maxDimension * 0.72f,
+            ))
+            // cortina roja arriba
+            val vh = 64.dp.toPx()
+            drawCover(Res.telon, topLeft = Offset.Zero, w = size.width, h = vh, anchorY = 0.2f)
+            drawRect(Brush.verticalGradient(listOf(Color(0x55000000), Color(0x00000000), Color(0x99000000)), endY = vh), size = size.copy(height = vh))
+            drawRect(Brush.verticalGradient(listOf(Color(0xAA000000), Color(0x00000000)), startY = vh, endY = vh + 26.dp.toPx()),
+                topLeft = Offset(0f, vh), size = size.copy(height = 26.dp.toPx()))
+            drawRect(C.Oro.copy(alpha = 0.55f), topLeft = Offset(0f, vh - 2.dp.toPx()), size = size.copy(height = 1.5.dp.toPx()))
+        }
+        onDrawBehind { drawImage(img) }
+    })
 }
 
 @Composable
@@ -549,7 +606,7 @@ fun NowBar(app: AppState) {
                     T(t.artist + "  ·  " + t.quality + if (p.bitPerfect) "  ·  bit-perfect" else "", 11, color = C.Tenue)
                 }
                 Box(Modifier.width(260.dp)) {
-                    ThinSlider(if (t.durationMs > 0) p.positionMs.toFloat() / t.durationMs else 0f, {}, onDone = { p.seek((it * t.durationMs).toLong()) })
+                    BarProgress(p, t)
                 }
                 Spacer(Modifier.width(16.dp))
                 RoundButton(Ico.Prev, { p.prev() })
@@ -560,4 +617,9 @@ fun NowBar(app: AppState) {
             }
         }
     }
+}
+
+@Composable
+private fun BarProgress(p: Player, t: Track) {
+    ThinSlider(if (t.durationMs > 0) p.positionMs.toFloat() / t.durationMs else 0f, {}, onDone = { p.seek((it * t.durationMs).toLong()) })
 }

@@ -28,6 +28,8 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -149,7 +151,7 @@ fun ThinSlider(value: Float, onChange: (Float) -> Unit, modifier: Modifier = Mod
 }
 
 @Composable
-fun rememberArt(path: String?, px: Int = 520): ImageBitmap? {
+fun rememberArt(path: String?, px: Int = 400): ImageBitmap? {
     val st by produceState(if (path != null) Art.cached(path) else null, path) {
         value = if (path == null) null else withContext(Dispatchers.IO) { Art.load(path, px) }
     }
@@ -169,7 +171,7 @@ fun Cover(path: String?, modifier: Modifier, title: String = "", radius: Dp = 4.
     }
 }
 
-/** Vinilo pequeño que gira (lo usan la barra inferior y el modo mini). */
+/** Vinilo pequeño que gira (barra inferior, modo mini y disco flotante). Solo gira la capa de la etiqueta. */
 @Composable
 fun MiniVinyl(art: ImageBitmap?, playing: Boolean, modifier: Modifier) {
     var angle by remember { mutableFloatStateOf(0f) }
@@ -178,7 +180,7 @@ fun MiniVinyl(art: ImageBitmap?, playing: Boolean, modifier: Modifier) {
         var last = 0L
         while (playing || speed > 0.5f) {
             withFrameNanos { n ->
-                val dt = if (last == 0L) 0.016f else ((n - last) / 1e9f).coerceAtMost(0.05f)
+                val dt = if (last == 0L) 0.016f else ((n - last) / 1e9f).coerceAtMost(0.06f)
                 last = n
                 val target = if (playing) 200f else 0f
                 speed += (target - speed) * (dt * if (playing) 2.4f else 1.6f).coerceAtMost(1f)
@@ -187,14 +189,17 @@ fun MiniVinyl(art: ImageBitmap?, playing: Boolean, modifier: Modifier) {
         }
         speed = 0f
     }
-    Canvas(modifier) {
-        val c = center
-        val r = size.minDimension / 2
-        drawCircle(Color(0xAA000000), r, c + Offset(0f, r * 0.06f))
-        drawCircle(Color(0xFF0C0B0B), r, c)
-        for (i in 0 until 14) drawCircle(Color.White.copy(alpha = 0.035f + (i % 3) * 0.012f), r * (0.42f + i * 0.04f), c, style = Stroke(0.8f))
-        drawCircle(Brush.sweepGradient(0f to Color(0x00FFFFFF), 0.1f to Color(0x22FFFFFF), 0.2f to Color(0x00FFFFFF), 0.6f to Color(0x00FFFFFF), 0.7f to Color(0x18FFFFFF), 0.8f to Color(0x00FFFFFF), center = c), r * 0.7f, c, style = Stroke(r * 0.6f))
-        rotate(angle, c) {
+    Box(modifier) {
+        Canvas(Modifier.fillMaxSize()) {
+            val c = center
+            val r = size.minDimension / 2
+            drawCircle(Color(0xFF0C0B0B), r, c)
+            for (i in 0 until 14) drawCircle(Color.White.copy(alpha = 0.035f + (i % 3) * 0.012f), r * (0.42f + i * 0.04f), c, style = Stroke(0.8f))
+            drawCircle(Brush.sweepGradient(0f to Color(0x00FFFFFF), 0.1f to Color(0x22FFFFFF), 0.2f to Color(0x00FFFFFF), 0.6f to Color(0x00FFFFFF), 0.7f to Color(0x18FFFFFF), 0.8f to Color(0x00FFFFFF), center = c), r * 0.7f, c, style = Stroke(r * 0.6f))
+        }
+        Canvas(Modifier.fillMaxSize().graphicsLayer { rotationZ = angle }) {
+            val c = center
+            val r = size.minDimension / 2
             val lr = r * 0.36f
             clipPath(Path().apply { addOval(Rect(c, lr)) }) {
                 if (art != null) drawCover(art, topLeft = c - Offset(lr, lr), w = lr * 2, h = lr * 2)
@@ -204,8 +209,8 @@ fun MiniVinyl(art: ImageBitmap?, playing: Boolean, modifier: Modifier) {
                 }
             }
             drawCircle(Color(0xFF0C0B0B), r * 0.03f, c + Offset(lr * 0.62f, 0f))
+            drawCircle(C.Crema.copy(alpha = 0.9f), r * 0.035f, c)
         }
-        drawCircle(C.Crema.copy(alpha = 0.9f), r * 0.035f, c)
     }
 }
 

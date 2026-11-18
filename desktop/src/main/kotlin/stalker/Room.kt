@@ -1,6 +1,18 @@
 package stalker
 
-import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,6 +39,8 @@ object Res {
     val telon: ImageBitmap by lazy { useResource("telon.jpg") { loadImageBitmap(it) } }
     val zigzag: ImageBitmap by lazy { useResource("zigzag.jpg") { loadImageBitmap(it) } }
     val logo: ImageBitmap by lazy { useResource("logo.png") { loadImageBitmap(it) } }
+    val woodBack: ImageBitmap by lazy { useResource("madera_fondo.jpg") { loadImageBitmap(it) } }
+    val plank: ImageBitmap by lazy { useResource("madera_repisa.jpg") { loadImageBitmap(it) } }
 }
 
 /** Shaders de la sala: el piso en zigzag en perspectiva y la luz que respira sobre el telón. */
@@ -101,55 +115,83 @@ fun DrawScope.drawCover(img: ImageBitmap, alpha: Float = 1f, topLeft: Offset = O
 /**
  * La red room: telón al fondo, piso en zigzag hacia el horizonte, una luz cálida
  * que cae sobre el tocadiscos y grano de película. [horizon] es la fracción de alto.
+ *
+ * Todo se pinta UNA vez en una imagen (se rehace solo si cambia el tamaño). Lo único que
+ * se mueve es un brillo suave sobre el telón, y solo mientras suena la música: así la
+ * ventana queda quieta y el PC descansa cuando no hace falta animar.
  */
 @Composable
 fun RoomBackdrop(modifier: Modifier, horizon: Float = 0.66f, pool: Offset = Offset(0.4f, 0.86f), dim: Float = 0f, animate: Boolean = true) {
-    var t by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(animate) {
-        if (!animate) return@LaunchedEffect
-        var last = 0L
-        while (true) {
-            withFrameNanos { n ->
-                if (last != 0L) t += ((n - last) / 1e9f).coerceAtMost(0.1f)
-                last = n
+    Box(modifier) {
+        Spacer(Modifier.fillMaxSize().drawWithCache {
+            val img = ImageBitmap(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
+            CanvasDrawScope().draw(this, layoutDirection, androidx.compose.ui.graphics.Canvas(img), size) {
+                drawRoomStatic(horizon, pool, dim)
             }
-            kotlinx.coroutines.delay(40) // la luz respira lento: no hace falta 60 fps
-        }
+            onDrawBehind { drawImage(img) }
+        })
+        if (animate && !Prefs.lite) CurtainSheen(Modifier.fillMaxSize(), horizon)
     }
+}
+
+/** Brillo que recorre los pliegues del telón: una imagen pintada una vez que solo se desliza. */
+@Composable
+private fun CurtainSheen(modifier: Modifier, horizon: Float) {
+    val t = rememberInfiniteTransition()
+    val x by t.animateFloat(0f, 1f, infiniteRepeatable(tween(26000, easing = LinearEasing), RepeatMode.Reverse))
+    Box(modifier.graphicsLayer { clip = true }) {
+        Spacer(Modifier.fillMaxSize().graphicsLayer {
+            translationX = (x - 0.5f) * size.width * 0.18f
+            alpha = 0.9f
+        }.drawWithCache {
+            val hz = size.height * horizon
+            val bands = listOf(0.12f, 0.31f, 0.47f, 0.66f, 0.83f)
+            onDrawBehind {
+                for ((i, b) in bands.withIndex()) {
+                    val cx = size.width * b
+                    val bw = size.width * (0.05f + (i % 2) * 0.03f)
+                    drawRect(
+                        Brush.horizontalGradient(
+                            listOf(Color(0x00FFD9B8), Color(0x16FFD9B8), Color(0x00FFD9B8)),
+                            startX = cx - bw, endX = cx + bw,
+                        ),
+                        topLeft = Offset(cx - bw, 0f), size = Size(bw * 2, hz),
+                        blendMode = BlendMode.Screen,
+                    )
+                }
+            }
+        })
+    }
+}
+
+private fun DrawScope.drawRoomStatic(horizon: Float, pool: Offset, dim: Float) {
     val floorFx = Shaders.floor
     val lightFx = Shaders.light
-    Canvas(modifier) {
-        val hz = size.height * horizon
-        drawRect(C.Sombra)
-        // telón
-        drawCover(Res.telon, topLeft = Offset.Zero, w = size.width, h = hz + 2, anchorY = 0.35f)
-        drawRect(Brush.verticalGradient(0f to Color(0x55000000), 0.55f to Color(0x00000000), 1f to Color(0xCC000000), endY = hz))
-        // piso
-        if (floorFx != null) {
-            val b = RuntimeShaderBuilder(floorFx)
-            b.uniform("res", size.width, size.height)
-            b.uniform("horizon", hz)
-            b.uniform("pool", pool.x, pool.y)
-            drawRect(ShaderBrush(b.makeShader()))
-        } else {
-            drawCover(Res.zigzag, topLeft = Offset(0f, hz), w = size.width, h = size.height - hz)
-            drawRect(Brush.verticalGradient(listOf(Color(0xEE000000), Color(0x55000000)), startY = hz, endY = size.height), topLeft = Offset(0f, hz))
-        }
-        // sombra donde el telón toca el piso
-        drawRect(Brush.verticalGradient(listOf(Color(0x00000000), Color(0xDD000000), Color(0x00000000)), startY = hz - size.height * 0.05f, endY = hz + size.height * 0.04f))
-        // luz y grano
-        if (lightFx != null) {
-            val b = RuntimeShaderBuilder(lightFx)
-            b.uniform("res", size.width, size.height)
-            b.uniform("t", t)
-            b.uniform("horizon", hz)
-            drawRect(ShaderBrush(b.makeShader()), blendMode = BlendMode.Screen)
-        }
-        // viñeta
-        drawRect(Brush.radialGradient(
-            0f to Color(0x00000000), 0.62f to Color(0x22000000), 1f to Color(0xDD000000),
-            center = Offset(size.width * pool.x, size.height * 0.55f), radius = size.maxDimension * 0.75f,
-        ))
-        if (dim > 0f) drawRect(Color.Black.copy(alpha = dim))
+    val hz = size.height * horizon
+    drawRect(C.Sombra)
+    drawCover(Res.telon, topLeft = Offset.Zero, w = size.width, h = hz + 2, anchorY = 0.35f)
+    drawRect(Brush.verticalGradient(0f to Color(0x55000000), 0.55f to Color(0x00000000), 1f to Color(0xCC000000), endY = hz))
+    if (floorFx != null) {
+        val b = RuntimeShaderBuilder(floorFx)
+        b.uniform("res", size.width, size.height)
+        b.uniform("horizon", hz)
+        b.uniform("pool", pool.x, pool.y)
+        drawRect(ShaderBrush(b.makeShader()))
+    } else {
+        drawCover(Res.zigzag, topLeft = Offset(0f, hz), w = size.width, h = size.height - hz)
+        drawRect(Brush.verticalGradient(listOf(Color(0xEE000000), Color(0x55000000)), startY = hz, endY = size.height), topLeft = Offset(0f, hz))
     }
+    drawRect(Brush.verticalGradient(listOf(Color(0x00000000), Color(0xDD000000), Color(0x00000000)), startY = hz - size.height * 0.05f, endY = hz + size.height * 0.04f))
+    if (lightFx != null) {
+        val b = RuntimeShaderBuilder(lightFx)
+        b.uniform("res", size.width, size.height)
+        b.uniform("t", 7.0f)
+        b.uniform("horizon", hz)
+        drawRect(ShaderBrush(b.makeShader()), blendMode = BlendMode.Screen)
+    }
+    drawRect(Brush.radialGradient(
+        0f to Color(0x00000000), 0.62f to Color(0x22000000), 1f to Color(0xDD000000),
+        center = Offset(size.width * pool.x, size.height * 0.55f), radius = size.maxDimension * 0.75f,
+    ))
+    if (dim > 0f) drawRect(Color.Black.copy(alpha = dim))
 }

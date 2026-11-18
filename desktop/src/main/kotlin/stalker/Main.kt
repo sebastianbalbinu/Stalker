@@ -104,6 +104,8 @@ class AppState(val player: Player) {
     /** Parte de abajo del panel: 0 pistas, 1 Jam. */
     var panelTab by mutableIntStateOf(0)
     var notice by mutableStateOf<String?>(null)
+    var floatDisc by mutableStateOf(Prefs.floatDisc)
+    var mainWindow: java.awt.Window? = null
 
     fun start() {
         Jam.attach(this)
@@ -257,11 +259,23 @@ fun main(args: Array<String>) {
             LaunchedEffect(Unit) {
                 window.minimumSize = java.awt.Dimension(980, 640)
                 polishWindow(window)
+                app.mainWindow = window
+                // sin aceleración gráfica (PC modesto o sin drivers): modo ligero automático, una sola vez
+                if (!Prefs.liteAsked) {
+                    Prefs.liteAsked = true
+                    if (window.renderApi.name.startsWith("SOFTWARE")) Prefs.lite = true
+                }
             }
             MainWindow(app, this, mainState)
         }
 
         if (app.mini) MiniWindow(app, icon)
+        if (mainState.isMinimized && !app.mini && app.floatDisc && player.queue.isNotEmpty()) {
+            FloatingDisc(app, icon) {
+                mainState.isMinimized = false
+                app.mainWindow?.let { it.isVisible = true; it.toFront(); it.requestFocus() }
+            }
+        }
     }
 }
 
@@ -469,6 +483,20 @@ fun SettingsSheet(app: AppState) {
                 SignalChain(p)
 
                 Spacer(Modifier.height(26.dp))
+                Section("VENTANA Y RENDIMIENTO")
+                Toggle(
+                    "Disco flotante al minimizar",
+                    "Al minimizar queda un vinilo girando sobre las demás ventanas. Pasa el mouse para pausar o cambiar de canción; doble clic para volver.",
+                    app.floatDisc,
+                ) { app.floatDisc = it; Prefs.floatDisc = it }
+                Spacer(Modifier.height(14.dp))
+                Toggle(
+                    "Modo ligero",
+                    "Para PCs modestos: el telón deja de moverse y el plato gira a 30 cuadros por segundo. El sonido no cambia.",
+                    Prefs.lite,
+                ) { Prefs.lite = it }
+
+                Spacer(Modifier.height(26.dp))
                 Section("CARPETAS DE MÚSICA")
                 T("Stalker revisa estas carpetas cada pocos minutos y agrega la música nueva sola.", 11, color = C.Apagado, maxLines = 2)
                 Spacer(Modifier.height(10.dp))
@@ -644,8 +672,8 @@ private fun MiniWindow(app: AppState, icon: BitmapPainter) {
                 }
                 // progreso
                 val dur = t?.durationMs ?: 0
-                val f = if (dur > 0) (p.positionMs.toFloat() / dur).coerceIn(0f, 1f) else 0f
                 Canvas(Modifier.fillMaxWidth().height(2.dp).align(Alignment.BottomCenter).padding(horizontal = 22.dp)) {
+                    val f = if (dur > 0) (p.positionMs.toFloat() / dur).coerceIn(0f, 1f) else 0f
                     drawRect(Color(0x22F1DFC4))
                     drawRect(C.RojoVivo, size = size.copy(width = size.width * f))
                 }

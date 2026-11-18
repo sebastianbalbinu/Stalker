@@ -23,7 +23,7 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "stalker.MainKt"
-        jvmArgs += listOf("-Dstalker.version=$pcVersion", "-Dsun.java2d.uiScale.enabled=true", "-Xmx768m")
+        jvmArgs += listOf("-Dstalker.version=$pcVersion", "-Dsun.java2d.uiScale.enabled=true", "-Xms64m", "-Xmx512m", "-XX:+UseStringDeduplication", "-XX:MaxGCPauseMillis=10")
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "Stalker"
