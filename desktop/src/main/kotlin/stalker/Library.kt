@@ -113,9 +113,10 @@ object Prefs {
 object Library {
     val exts = setOf("flac", "wav", "mp3")
 
-    init {
-        Logger.getLogger("org.jaudiotagger").level = Level.OFF
-    }
+    // referencia fuerte: si no, Java olvida el nivel y jaudiotagger llena el registro
+    private val jatLogger: Logger = Logger.getLogger("org.jaudiotagger").apply { level = Level.OFF }
+
+    fun quiet() { jatLogger.level = Level.OFF }
 
     private val cacheFile get() = File(Prefs.dataDir, "biblioteca.tsv")
 

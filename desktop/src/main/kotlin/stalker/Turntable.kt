@@ -188,8 +188,11 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
     var spot by remember { mutableStateOf<Spot?>(null) }
     val scope = rememberCoroutineScope()
 
+    // el usuario dejó el brazo en su apoyo: se queda ahí hasta que vuelva a sonar
+    var parked by remember(queue) { mutableStateOf(false) }
+    LaunchedEffect(player.playing) { if (player.playing) parked = false }
     val progress = (player.albumPositionMs.toFloat() / total).coerceIn(0f, 1f)
-    val engaged = queue.isNotEmpty() && (player.playing || player.positionMs > 0 || player.index > 0)
+    val engaged = !parked && queue.isNotEmpty() && (player.playing || player.positionMs > 0 || player.index > 0)
     val target = if (engaged) Deck.phiFor(Deck.rForFrac(progress)) else Deck.REST
 
     LaunchedEffect(target, dragging) {
@@ -203,7 +206,7 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
     }
 
     fun spotAt(r: Float): Spot? {
-        if (queue.isEmpty() || r < Deck.R_INNER - 0.006f || r > Deck.R_VINYL) return null
+        if (queue.isEmpty() || r < Deck.R_INNER - 0.006f || r > Deck.R_VINYL + 0.012f) return null
         var ms = (Deck.fracFor(r) * total).toLong()
         var snapped = false
         // imán: cerca del comienzo de una canción, la aguja cae justo ahí
@@ -278,8 +281,8 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
                                         player.dropNeedle(s.albumMs)
                                         scope.launch { arm.animateTo(Deck.phiFor(Deck.rForFrac(s.albumMs.toFloat() / total)), tween(260)) }
                                     } else {
+                                        parked = true
                                         player.pause()
-                                        scope.launch { arm.animateTo(Deck.REST, tween(700, easing = FastOutSlowInEasing)) }
                                     }
                                 }
                             }

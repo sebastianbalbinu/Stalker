@@ -192,6 +192,7 @@ val version: String get() = System.getProperty("stalker.version") ?: "1.0"
 
 fun main() {
     try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) } catch (_: Throwable) {}
+    Library.quiet()
     val player = Player()
     val app = AppState(player)
     app.start()
@@ -440,9 +441,9 @@ fun SettingsSheet(app: AppState) {
                 Spacer(Modifier.height(26.dp))
                 Section("ATAJOS")
                 Shortcut("Espacio", "Reproducir / pausar")
-                Shortcut("← →", "Adelantar o retroceder 5 s (Shift: 1 s)")
-                Shortcut("Ctrl ← →", "Canción anterior / siguiente")
-                Shortcut("↑ ↓", "Volumen")
+                Shortcut("Flechas izq. / der.", "Adelantar o retroceder 5 s (Shift: 1 s)")
+                Shortcut("Ctrl + flechas", "Canción anterior / siguiente")
+                Shortcut("Flechas arriba / abajo", "Volumen")
                 Shortcut("F", "Sala a pantalla completa")
                 Shortcut("M", "Modo mini flotante")
                 Shortcut("Rueda sobre el disco", "Mover la aguja")
@@ -533,20 +534,20 @@ private fun MiniWindow(app: AppState, icon: BitmapPainter) {
         val y = Prefs.miniY.takeIf { it >= 0 } ?: (b.y + b.height - 160)
         WindowPosition(x.dp, y.dp)
     }
-    val st = rememberWindowState(size = DpSize(420.dp, 132.dp), position = pos)
+    val st = rememberWindowState(size = DpSize(410.dp, 120.dp), position = pos)
     Window(
         onCloseRequest = { app.mini = false },
         state = st,
         title = "Stalker",
         icon = icon,
         undecorated = true,
-        transparent = true,
         resizable = false,
         alwaysOnTop = true,
         onPreviewKeyEvent = { e ->
             if (e.type == KeyEventType.KeyDown && e.key == Key.Spacebar) { p.toggle(); true } else false
         },
     ) {
+        LaunchedEffect(Unit) { polishWindow(window) }
         DisposableEffect(Unit) {
             onDispose {
                 Prefs.miniX = window.x
@@ -555,12 +556,10 @@ private fun MiniWindow(app: AppState, icon: BitmapPainter) {
         }
         val t = p.current
         val art = rememberArt(t?.path)
-        Box(Modifier.fillMaxSize().padding(6.dp)) {
+        Box(Modifier.fillMaxSize().background(C.Sombra)) {
             Box(
                 Modifier.fillMaxSize()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Brush.horizontalGradient(listOf(Color(0xFA2A0606), Color(0xFA140B09), Color(0xFA0E0907))))
-                    .border(1.dp, Color(0x2AF1DFC4), RoundedCornerShape(22.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF2A0606), Color(0xFF140B09), Color(0xFF0E0907))))
             ) {
                 // el telón asoma a la izquierda
                 Canvas(Modifier.width(120.dp).fillMaxHeight()) {
