@@ -424,7 +424,7 @@ private fun KeptView(cam: androidx.compose.runtime.State<Float>, side: Float, ac
         translationX = side * away * size.width * 0.32f
         val sc = 1f + away * 0.10f
         scaleX = sc; scaleY = sc
-        alpha = if (side < 0) 1f else (1f - away)
+        alpha = (1f - away * 1.1f).coerceIn(0f, 1f)
         val blur = away * 22f
         renderEffect = if (!Prefs.lite && blur > 0.5f && blur < 21.5f) androidx.compose.ui.graphics.BlurEffect(blur, blur, androidx.compose.ui.graphics.TileMode.Clamp) else null
     }) {
