@@ -527,8 +527,8 @@ private fun Display(a: Album, playing: Boolean, cabW: Float, modifier: Modifier,
             val w = size.width
             val h = size.height
             val cx = w * 0.42f
-            drawOval(Brush.radialGradient(listOf(Color(0x40FFD2A0), Color(0x00FFD2A0)), Offset(cx, h * 0.45f), w * 0.55f),
-                Offset(cx - w * 0.55f, -h * 0.1f), Size(w * 1.1f, h * 1.1f))
+            val rr = min(w * 0.42f, h * 0.5f)
+            drawCircle(Brush.radialGradient(listOf(Color(0x2EFFD2A0), Color(0x10FFD2A0), Color(0x00FFD2A0)), Offset(cx, h * 0.5f), rr), rr, Offset(cx, h * 0.5f))
             val ledgeY = h - h * 0.17f
             // sombra del atril sobre el mueble
             drawOval(Color(0x88000000), Offset(w * 0.06f, h - h * 0.07f), Size(w * 0.74f, h * 0.07f))
