@@ -445,7 +445,7 @@ fun SleeveCard(app: AppState, a: Album) {
                 rotationZ = 38f * o
             }.drawWithCache {
                 val r = size.minDimension * 0.47f
-                val c = center
+                val c = Offset(size.width / 2f, size.height / 2f)
                 onDrawBehind {
                     drawCircle(Color(0x88000000), r, c + Offset(3f, 6f))
                     drawCircle(Color(0xFF0C0B0B), r, c)
