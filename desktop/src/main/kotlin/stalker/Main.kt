@@ -342,7 +342,7 @@ private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.comp
 
         // barra superior
         if (!app.immersive) {
-            Box(Modifier.fillMaxWidth().height(52.dp).background(Brush.verticalGradient(listOf(Color(0xCC000000), Color(0x00000000))))) {
+            Box(Modifier.zIndex(5f).fillMaxWidth().height(52.dp).background(Brush.verticalGradient(listOf(Color(0xCC000000), Color(0x00000000))))) {
                 scope.WindowDraggableArea(Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize().pointerInput(Unit) {
                         awaitPointerEventScope {
@@ -389,22 +389,22 @@ private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.comp
             }
         } else {
             // en la sala inmersiva solo un botón discreto para volver
-            Box(Modifier.fillMaxWidth().padding(14.dp), contentAlignment = Alignment.TopEnd) {
+            Box(Modifier.zIndex(5f).fillMaxWidth().padding(14.dp), contentAlignment = Alignment.TopEnd) {
                 RoundButton(Ico.Close, { app.immersive = false; st.placement = WindowPlacement.Floating }, 32.dp, 13.dp, tint = C.Tenue)
             }
         }
 
         // agarre para cambiar el tamaño (la ventana no tiene marco)
         if (!app.immersive && restoreBounds == null) {
-            ResizeGrip(window, Modifier.align(Alignment.BottomEnd))
+            ResizeGrip(window, Modifier.align(Alignment.BottomEnd).zIndex(5f))
         }
 
         app.notice?.let { n ->
-            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 30.dp).clip(RoundedCornerShape(50)).background(C.Crema).padding(horizontal = 18.dp, vertical = 10.dp)) {
+            Box(Modifier.align(Alignment.BottomCenter).zIndex(6f).padding(bottom = 30.dp).clip(RoundedCornerShape(50)).background(C.Crema).padding(horizontal = 18.dp, vertical = 10.dp)) {
                 T(n, 12, FontWeight.Medium, C.Sombra)
             }
         }
-        AnimatedVisibility(app.settings, enter = fadeIn(tween(200)), exit = fadeOut(tween(200))) {
+        AnimatedVisibility(app.settings, Modifier.zIndex(7f), enter = fadeIn(tween(200)), exit = fadeOut(tween(200))) {
             SettingsSheet(app)
         }
     }
