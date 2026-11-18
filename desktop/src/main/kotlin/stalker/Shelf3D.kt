@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
@@ -564,7 +565,7 @@ private fun PulledOut(app: AppState, p: Pulled, modifier: Modifier, onClose: () 
                     for (i in 0 until 22) drawCircle(Color.White.copy(alpha = 0.03f + (i % 3) * 0.012f), r * (0.38f + i * 0.028f), c, style = Stroke(0.8f))
                     drawCircle(Brush.sweepGradient(0f to Color(0x00FFFFFF), 0.1f to Color(0x22FFFFFF), 0.2f to Color(0x00FFFFFF), 0.6f to Color(0x00FFFFFF), 0.7f to Color(0x18FFFFFF), 0.8f to Color(0x00FFFFFF), center = c), r * 0.7f, c, style = Stroke(r * 0.58f))
                     val lr = r * 0.33f
-                    androidx.compose.ui.graphics.drawscope.clipPath(Path().apply { addOval(Rect(c, lr)) }) {
+                    clipPath(Path().apply { addOval(Rect(c, lr)) }) {
                         if (art != null) drawCover(art, topLeft = c - Offset(lr, lr), w = lr * 2, h = lr * 2) else drawCircle(C.Rojo, lr, c)
                     }
                     drawCircle(C.Crema, r * 0.022f, c)
