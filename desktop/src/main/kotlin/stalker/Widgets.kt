@@ -28,6 +28,9 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.geometry.CornerRadius
@@ -176,9 +179,12 @@ fun Cover(path: String?, modifier: Modifier, title: String = "", radius: Dp = 4.
 fun MiniVinyl(art: ImageBitmap?, playing: Boolean, modifier: Modifier) {
     var angle by remember { mutableFloatStateOf(0f) }
     var speed by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(playing) {
+    val motion = Prefs.motion
+    LaunchedEffect(playing, motion) {
+        if (!motion) { speed = 0f; return@LaunchedEffect }
         var last = 0L
         while (playing || speed > 0.5f) {
+            kotlinx.coroutines.delay(16)
             withFrameNanos { n ->
                 val dt = if (last == 0L) 0.016f else ((n - last) / 1e9f).coerceAtMost(0.06f)
                 last = n
@@ -222,4 +228,72 @@ fun Card(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
             .background(Brush.verticalGradient(listOf(Color(0xE61A110E), Color(0xF00E0907))))
             .border(1.dp, Color(0x1FF1DFC4), RoundedCornerShape(18.dp))
     ) { content() }
+}
+
+/**
+ * Una capa que se pinta UNA vez en segundo plano y luego solo se copia a la pantalla.
+ * Mientras se prepara (al abrir o al cambiar el tamaño) se ve la versión anterior estirada
+ * o un color de fondo: la ventana nunca se congela esperando.
+ */
+@Composable
+fun Raster(
+    modifier: Modifier,
+    key: Any?,
+    placeholder: Color = Color.Transparent,
+    pad: Float = 0f,
+    draw: androidx.compose.ui.graphics.drawscope.DrawScope.(TextMeasurerFactory) -> Unit,
+) {
+    var size by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var img by remember { mutableStateOf<ImageBitmap?>(null) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val fonts = androidx.compose.ui.platform.LocalFontFamilyResolver.current
+    val shown = androidx.compose.animation.core.animateFloatAsState(if (img != null) 1f else 0f, androidx.compose.animation.core.tween(240))
+    LaunchedEffect(size, key) {
+        if (size.width <= 0 || size.height <= 0) return@LaunchedEffect
+        if (img != null) kotlinx.coroutines.delay(140) // al redimensionar se espera a que el usuario suelte
+        val padPx = (pad * size.width).toInt()
+        val w = size.width + padPx * 2
+        val h = size.height + padPx * 2
+        val out = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val b = ImageBitmap(w, h)
+            val tmf = TextMeasurerFactory(fonts, density)
+            androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(density, androidx.compose.ui.unit.LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(b),
+                androidx.compose.ui.geometry.Size(w.toFloat(), h.toFloat())) {
+                withTransform({ translate(padPx.toFloat(), padPx.toFloat()) }) {
+                    // el dibujo cree tener el tamaño de la capa (sin el margen)
+                    drawInto(this, size, tmf, draw)
+                }
+            }
+            b
+        }
+        img = out
+    }
+    Spacer(modifier.onSizeChanged { size = it }.drawBehind {
+        val i = img
+        if (i == null) { if (placeholder.alpha > 0f) drawRect(placeholder); return@drawBehind }
+        val padPx = (pad * this.size.width)
+        if (placeholder.alpha > 0f && shown.value < 1f) drawRect(placeholder)
+        drawImage(i, dstOffset = androidx.compose.ui.unit.IntOffset(-padPx.toInt(), -padPx.toInt()),
+            dstSize = androidx.compose.ui.unit.IntSize((this.size.width + padPx * 2).toInt(), (this.size.height + padPx * 2).toInt()),
+            alpha = shown.value)
+    })
+}
+
+/** Medidor de texto propio de cada pintura en segundo plano (el de la ventana no se comparte entre hilos). */
+class TextMeasurerFactory(private val fonts: androidx.compose.ui.text.font.FontFamily.Resolver, private val density: androidx.compose.ui.unit.Density) {
+    val measurer by lazy { androidx.compose.ui.text.TextMeasurer(fonts, density, androidx.compose.ui.unit.LayoutDirection.Ltr) }
+}
+
+private fun drawInto(
+    scope: androidx.compose.ui.graphics.drawscope.DrawScope,
+    size: androidx.compose.ui.unit.IntSize,
+    tmf: TextMeasurerFactory,
+    draw: androidx.compose.ui.graphics.drawscope.DrawScope.(TextMeasurerFactory) -> Unit,
+) {
+    // limita el área al tamaño real de la capa
+    val ds = object : androidx.compose.ui.graphics.drawscope.DrawScope by scope {
+        override val size: androidx.compose.ui.geometry.Size get() = androidx.compose.ui.geometry.Size(size.width.toFloat(), size.height.toFloat())
+        override val center: Offset get() = Offset(size.width / 2f, size.height / 2f)
+    }
+    ds.draw(tmf)
 }

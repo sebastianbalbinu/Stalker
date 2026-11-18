@@ -133,6 +133,7 @@ private data class Spot(val track: Int, val ms: Long, val albumMs: Long, val sna
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, tilt: Float = 9f, active: Boolean = true) {
+    val motion = Prefs.motion
     val queue = player.queue
     val total = player.albumDurationMs.coerceAtLeast(1)
     val bounds = remember(queue) {
@@ -141,7 +142,7 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
     }
     var peaksVersion by remember { mutableIntStateOf(0) }
     LaunchedEffect(queue) {
-        withContext(Dispatchers.IO) {
+        withContext(LowPriority) {
             for (t in queue) {
                 if (Peaks.get(t.path) == null && Peaks.load(t) != null) peaksVersion++
             }
@@ -173,13 +174,13 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
     // giro del plato con arranque y frenado suaves
     var spin by remember { mutableFloatStateOf(0f) }
     var speed by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(player.playing, active) {
-        if (!active) return@LaunchedEffect // fuera de cámara el plato no se anima: la ventana descansa
+    LaunchedEffect(player.playing, active, motion) {
+        if (!active || !motion) return@LaunchedEffect // fuera de cámara o sin animaciones el plato no se anima: la ventana descansa
         var last = 0L
         while (true) {
             val target = if (player.playing) 200f else 0f // 33⅓ rpm = 200°/s
             if (target == 0f && speed < 0.5f) { speed = 0f; last = 0L; delay(120); if (!player.playing) continue }
-            if (Prefs.lite) delay(30)
+            delay(16) // 30 cuadros por segundo bastan para un disco girando y la mitad de trabajo
             withFrameNanos { n ->
                 val dt = if (last == 0L) 0.016f else ((n - last) / 1e9f).coerceAtMost(0.06f)
                 last = n
@@ -255,7 +256,7 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
         modifier
             .aspectRatio(1f / Deck.H)
             .graphicsLayer {
-                rotationX = tilt
+                rotationX = if (motion) tilt else 0f
                 cameraDistance = 14f * density
             }
             .pointerHoverIcon(PointerIcon(Cursor(if (dragging) Cursor.MOVE_CURSOR else Cursor.HAND_CURSOR)))
@@ -329,13 +330,7 @@ fun Turntable(player: Player, art: ImageBitmap?, modifier: Modifier = Modifier, 
             }
     ) {
         // 1. todo lo que no se mueve, dibujado una sola vez en una imagen
-        Spacer(Modifier.fillMaxSize().drawWithCache {
-            val img = ImageBitmap(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
-            CanvasDrawScope().draw(this, layoutDirection, androidx.compose.ui.graphics.Canvas(img), size) {
-                drawDeckStatic(tm, rings, bounds, total)
-            }
-            onDrawBehind { drawImage(img) }
-        })
+        Raster(Modifier.fillMaxSize(), key = Triple(rings, bounds, total), pad = 0.06f) { f -> drawDeckStatic(f.measurer, rings, bounds, total) }
         // 2. lo que gira: etiqueta y puntos del plato; solo cambia el ángulo de la capa (no se redibuja)
         Canvas(Modifier.fillMaxSize().graphicsLayer {
             rotationZ = spin

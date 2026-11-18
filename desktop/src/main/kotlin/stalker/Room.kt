@@ -155,14 +155,8 @@ fun DrawScope.drawCover(img: ImageBitmap, alpha: Float = 1f, topLeft: Offset = O
 @Composable
 fun RoomBackdrop(modifier: Modifier, horizon: Float = 0.66f, pool: Offset = Offset(0.4f, 0.86f), dim: Float = 0f, animate: Boolean = true) {
     Box(modifier) {
-        Spacer(Modifier.fillMaxSize().drawWithCache {
-            val img = ImageBitmap(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
-            CanvasDrawScope().draw(this, layoutDirection, androidx.compose.ui.graphics.Canvas(img), size) {
-                drawRoomStatic(horizon, pool, dim)
-            }
-            onDrawBehind { drawImage(img) }
-        })
-        if (animate && !Prefs.lite) CurtainSheen(Modifier.fillMaxSize(), horizon)
+        Raster(Modifier.fillMaxSize(), key = Triple(horizon, pool, dim), placeholder = C.Sombra) { drawRoomStatic(horizon, pool, dim) }
+        if (animate && Prefs.motion) CurtainSheen(Modifier.fillMaxSize(), horizon)
     }
 }
 

@@ -257,7 +257,7 @@ class Player {
         val info = IntArray(12)
         var saveCounter = 0
         while (scope.isActive) {
-            delay(if (background) 200 else 40)
+            delay(if (background || !Prefs.motion) 250 else 50)
             val l = Audio.lib ?: continue
             if (!loaded) continue
             l.sa_info(info)

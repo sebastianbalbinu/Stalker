@@ -116,7 +116,7 @@ object Spines {
     }
 
     /** Calcula en segundo plano los colores que falten (despacio, para no molestar al audio). */
-    suspend fun fill(albums: List<Album>) = withContext(Dispatchers.IO) {
+    suspend fun fill(albums: List<Album>) = withContext(LowPriority) {
         loadFile()
         var changed = 0
         for (a in albums) {
@@ -297,14 +297,7 @@ private fun matches(a: Album, q: String) =
 /** El mueble de nogal con sus cubos, patas y sombra: se pinta una vez. */
 @Composable
 private fun Cabinet(modifier: Modifier) {
-    Spacer(modifier.drawWithCache {
-        val pad = (size.width * 0.06f).toInt()
-        val img = ImageBitmap(size.width.toInt() + pad * 2, (size.height + pad * 2).toInt())
-        CanvasDrawScope().draw(this, layoutDirection, androidx.compose.ui.graphics.Canvas(img), Size(img.width.toFloat(), img.height.toFloat())) {
-            withTransform({ translate(pad.toFloat(), pad.toFloat()) }) { drawCabinet(size.width - pad * 2, Res.woodBack, Res.plank) }
-        }
-        onDrawBehind { drawImage(img, topLeft = Offset(-pad.toFloat(), -pad.toFloat())) }
-    })
+    Raster(modifier, key = Unit, pad = 0.06f) { drawCabinet(size.width, Res.woodBack, Res.plank) }
 }
 
 

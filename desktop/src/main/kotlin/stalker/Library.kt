@@ -9,6 +9,7 @@ import java.io.ByteArrayInputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
+import kotlinx.coroutines.asCoroutineDispatcher
 import java.util.Collections
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -94,10 +95,15 @@ object Prefs {
         get() = p.getInt("miniY", -1)
         set(v) = p.putInt("miniY", v)
     /** Modo ligero para PCs modestos: menos animación de fondo y menos memoria. */
-    private val liteState = androidx.compose.runtime.mutableStateOf(p.getBoolean("lite", false))
+    private val motionState = androidx.compose.runtime.mutableStateOf(p.getBoolean("motion", true))
+    /** Animaciones encendidas. Apagadas: nada se mueve solo y la ventana solo se redibuja cuando algo cambia. */
+    var motion: Boolean
+        get() = motionState.value
+        set(v) { motionState.value = v; p.putBoolean("motion", v) }
+    /** Compatibilidad: "ligero" es lo mismo que sin animaciones. */
     var lite: Boolean
-        get() = liteState.value
-        set(v) { liteState.value = v; p.putBoolean("lite", v) }
+        get() = !motionState.value
+        set(v) { motion = !v }
     var floatX: Int
         get() = p.getInt("floatX", -1)
         set(v) = p.putInt("floatX", v)
@@ -129,6 +135,11 @@ object Prefs {
         File(base, "Stalker").apply { mkdirs() }
     }
 }
+
+/** Hilo de baja prioridad para trabajos pesados de fondo (formas de onda, colores de lomos): nunca compite con el audio ni con la ventana. */
+val LowPriority: kotlinx.coroutines.CoroutineDispatcher = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+    Thread(r, "stalker-fondo").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }
+}.asCoroutineDispatcher()
 
 object Library {
     val exts = setOf("flac", "wav", "mp3")

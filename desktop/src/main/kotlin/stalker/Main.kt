@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -266,16 +267,17 @@ fun main(args: Array<String>) {
                 // sin aceleración gráfica (PC modesto o sin drivers): modo ligero automático, una sola vez
                 if (!Prefs.liteAsked) {
                     Prefs.liteAsked = true
-                    if (window.renderApi.name.startsWith("SOFTWARE")) Prefs.lite = true
+                    if (window.renderApi.name.startsWith("SOFTWARE")) Prefs.motion = false
                 }
             }
             MainWindow(app, this, mainState)
         }
 
         LaunchedEffect(mainState.isMinimized, app.mini) { player.background = mainState.isMinimized || app.mini }
-        if (app.mini) MiniWindow(app, icon)
-        if (mainState.isMinimized && !app.mini && app.floatDisc && player.queue.isNotEmpty()) {
+        // un solo modo mini: el disco que flota y gira
+        if (app.mini || (mainState.isMinimized && app.floatDisc && player.queue.isNotEmpty())) {
             FloatingDisc(app, icon) {
+                app.mini = false
                 mainState.isMinimized = false
                 app.mainWindow?.let { it.isVisible = true; it.toFront(); it.requestFocus() }
             }
@@ -335,7 +337,7 @@ private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.comp
         // una sola sala y una cámara: va del tocadiscos a la estantería con un desenfoque de foco
         val cam = androidx.compose.animation.core.animateFloatAsState(
             if (app.view == View.Shelf) 1f else 0f,
-            tween(620, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            if (Prefs.motion) tween(480, easing = androidx.compose.animation.core.FastOutSlowInEasing) else androidx.compose.animation.core.snap(),
         )
         KeptView(cam, side = -1f, active = app.view == View.Sala) { SalaScreen(app) }
         KeptView(cam, side = 1f, active = app.view == View.Shelf) { ShelfScreen(app) }
@@ -425,8 +427,10 @@ private fun KeptView(cam: androidx.compose.runtime.State<Float>, side: Float, ac
         val sc = 1f + away * 0.10f
         scaleX = sc; scaleY = sc
         alpha = (1f - away * 1.1f).coerceIn(0f, 1f)
-        val blur = away * 22f
-        renderEffect = if (!Prefs.lite && blur > 0.5f && blur < 21.5f) androidx.compose.ui.graphics.BlurEffect(blur, blur, androidx.compose.ui.graphics.TileMode.Clamp) else null
+    }.drawWithContent {
+        // la vista que la cámara no mira no se dibuja (ahorra todo su trabajo)
+        val away = if (side < 0) cam.value else 1f - cam.value
+        if (away < 0.999f) drawContent()
     }) {
         content()
         // la vista que no está en foco no recibe clics ni el paso del mouse
@@ -531,10 +535,10 @@ fun SettingsSheet(app: AppState) {
                 ) { v -> app.shelfMode = if (v) 0 else 3; Prefs.shelfMode = app.shelfMode }
                 Spacer(Modifier.height(14.dp))
                 Toggle(
-                    "Modo ligero",
-                    "Para PCs modestos: el telón deja de moverse y el plato gira a 30 cuadros por segundo. El sonido no cambia.",
-                    Prefs.lite,
-                ) { Prefs.lite = it }
+                    "Animaciones",
+                    "Apágalas si el PC va lento: el plato y el telón se quedan quietos y la ventana solo se redibuja cuando algo cambia. El sonido es el mismo.",
+                    Prefs.motion,
+                ) { Prefs.motion = it }
 
                 Spacer(Modifier.height(26.dp))
                 Section("CARPETAS DE MÚSICA")

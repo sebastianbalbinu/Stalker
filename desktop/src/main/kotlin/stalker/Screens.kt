@@ -540,9 +540,8 @@ fun SleeveCard(app: AppState, a: Album) {
 /** Pared de nogal con la cortina roja arriba: la estantería de la sala. Se pinta una sola vez. */
 @Composable
 fun WoodWall(modifier: Modifier) {
-    Spacer(modifier.drawWithCache {
-        val img = ImageBitmap(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
-        CanvasDrawScope().draw(this, layoutDirection, androidx.compose.ui.graphics.Canvas(img), size) {
+    Raster(modifier, key = Unit, placeholder = C.Sombra) {
+        run {
             drawRect(ShaderBrush(ImageShader(Res.woodBack, TileMode.Repeated, TileMode.Repeated)))
             // luz cálida que cae desde arriba
             drawRect(Brush.radialGradient(
@@ -561,8 +560,7 @@ fun WoodWall(modifier: Modifier) {
                 topLeft = Offset(0f, vh), size = size.copy(height = 26.dp.toPx()))
             drawRect(C.Oro.copy(alpha = 0.55f), topLeft = Offset(0f, vh - 2.dp.toPx()), size = size.copy(height = 1.5.dp.toPx()))
         }
-        onDrawBehind { drawImage(img) }
-    })
+    }
 }
 
 @Composable
