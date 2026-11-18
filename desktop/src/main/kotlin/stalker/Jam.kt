@@ -146,6 +146,11 @@ object Jam {
         ))
     }
 
+    private var lead = 150L
+    private var seekAt = 0L
+    private var measured = true
+
+    @Suppress("UNUSED_PARAMETER")
     private fun apply(app: AppState, st: JamState, soft: Boolean) {
         val p = app.player
         val mapped = st.tracks.map { r -> jamMatch(r, app.tracks, { it.title }, { it.artist }, { it.durationMs }) }
@@ -159,11 +164,17 @@ object Jam {
         val local = have.indexOf(cur)
         val exp = st.expectedPos(System.currentTimeMillis()).coerceAtLeast(0)
         if (p.queue.map { it.path } != have.map { it.path }) {
-            p.setQueue(have, local, st.disc, play = st.playing, startMs = exp)
+            p.setQueue(have, local, st.disc, play = st.playing, startMs = exp + lead)
+            seekAt = System.currentTimeMillis(); measured = false
             return
         }
-        if (p.index != local) { p.jumpTo(local, exp, st.playing); return }
-        if (abs(p.positionMs - exp) > (if (soft) 900 else 450)) p.seek(exp)
+        val now = System.currentTimeMillis()
+        if (p.index != local) { p.jumpTo(local, exp + lead, st.playing); seekAt = now; measured = false; return }
+        if (st.playing && p.playing && now - seekAt > 3000) {
+            val drift = p.positionMs - exp
+            if (!measured && seekAt > 0) { lead = (lead - drift).coerceIn(0L, 1500L); measured = true }
+            if (abs(drift) > 700) { p.seek(exp + lead); seekAt = now; measured = false }
+        }
         if (st.playing && !p.playing) p.play() else if (!st.playing && p.playing) p.pause()
     }
 }

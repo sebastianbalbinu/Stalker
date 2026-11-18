@@ -60,9 +60,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 delay(500)
                 tick++
                 val core = Jam.core
+                if (!core.active || !core.live || core.host) controller?.let { if (jamRate != 1f) jamSpeed(it, 1f) }
                 if (!core.active || !core.live) continue
                 if (core.host) publishJam(force = false)
-                else if (tick % 4 == 0) core.remote?.let { applyJam(it, soft = true) }
+                else if (tick % 2 == 0) core.remote?.let { applyJam(it, soft = true) }
             }
         }
         viewModelScope.launch { Updates.check(app) }
@@ -194,6 +195,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    private var jamLead = 350L
+    private var jamSeekAt = 0L
+    private var jamMeasured = true
+    private var jamRate = 1f
+
+    private fun jamSpeed(c: MediaController, r: Float) {
+        if (kotlin.math.abs(r - jamRate) < 0.004f) return
+        jamRate = r
+        c.setPlaybackSpeed(r)
+    }
+
+    @Suppress("UNUSED_PARAMETER")
     private fun applyJam(st: JamState, soft: Boolean) {
         val c = controller ?: return
         val lib = Engine.tracks.value
@@ -210,14 +223,33 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (queue.value.map { it.id } != have.map { it.id }) {
             Engine.setQueueTitle(st.disc)
             c.shuffleModeEnabled = false
-            c.setMediaItems(have.map { Engine.mediaItem(it) }, localIdx, exp)
+            c.setMediaItems(have.map { Engine.mediaItem(it) }, localIdx, exp + jamLead)
+            jamSeekAt = System.currentTimeMillis(); jamMeasured = false
             c.prepare()
             c.playWhenReady = st.playing
             return
         }
-        if (c.currentMediaItemIndex != localIdx) c.seekTo(localIdx, exp)
-        else if (kotlin.math.abs(c.currentPosition - exp) > (if (soft) 900 else 450)) c.seekTo(exp)
-        if (st.playing && !c.isPlaying) {
+        val now = System.currentTimeMillis()
+        if (c.currentMediaItemIndex != localIdx) {
+            c.seekTo(localIdx, exp + jamLead)
+            jamSeekAt = now; jamSpeed(c, 1f)
+        } else if (st.playing && c.isPlaying && now - jamSeekAt > 3000) {
+            val drift = c.currentPosition - exp
+            if (!jamMeasured && jamSeekAt > 0) {
+                // aprende cuánto tarda este teléfono en arrancar después de mover la aguja
+                jamLead = (jamLead - drift).coerceIn(0L, 1500L)
+                jamMeasured = true
+            }
+            when {
+                kotlin.math.abs(drift) > 2000 -> {
+                    c.seekTo(exp + jamLead); jamSeekAt = now; jamMeasured = false; jamSpeed(c, 1f)
+                }
+                // deriva pequeña: se corrige acelerando o frenando apenas, sin cortes
+                kotlin.math.abs(drift) > 120 -> jamSpeed(c, (1f - drift / 5000f).coerceIn(0.97f, 1.03f))
+                kotlin.math.abs(drift) < 50 -> jamSpeed(c, 1f)
+            }
+        }
+        if (st.playing && !c.isPlaying && c.playbackState != Player.STATE_BUFFERING) {
             if (c.playbackState == Player.STATE_IDLE) c.prepare()
             c.play()
         } else if (!st.playing && c.isPlaying) c.pause()
