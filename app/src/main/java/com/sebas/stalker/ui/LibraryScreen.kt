@@ -215,6 +215,7 @@ fun LibraryScreen(
                         val openAlbum: (Album) -> Unit = { onOpen(Detail.OfAlbum(it.id)) }
                         val longAlbum: (Album) -> Unit = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); albumMenu = it }
                         val nowAlbum = if (playing) currentAlbum else null
+                        WoodCabinet(Modifier.fillMaxSize()) {
                         LazyColumn(
                             state = ui.list(if (tab == "Álbumes") "albums" else "favs"),
                             contentPadding = PaddingValues(bottom = bottom),
@@ -230,6 +231,7 @@ fun LibraryScreen(
                                 item(key = "todos") { ShelfTitle(tr("TODOS LOS ÁLBUMES") + " · " + tr(sort).uppercase()) }
                             }
                             shelfGrid(sections, columns, discView, { nowAlbum }, openAlbum, longAlbum)
+                        }
                         }
                     }
                 }

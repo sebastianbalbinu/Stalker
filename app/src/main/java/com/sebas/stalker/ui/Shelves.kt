@@ -46,6 +46,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageShader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.res.imageResource
+import com.sebas.stalker.R
 import com.sebas.stalker.Album
 import com.sebas.stalker.AlbumQuality
 import com.sebas.stalker.Engine
@@ -130,19 +143,121 @@ private fun khz(rate: Int): String =
 
 /* ---------------------------------------------------------------- madera */
 
-private val WoodEdge get() = if (C.dark) Color(0xFF6E5038) else Color(0xFF9A7253)
-private val WoodTop get() = if (C.dark) Color(0xFF5A3E2B) else Color(0xFF7B5638)
-private val WoodBottom get() = if (C.dark) Color(0xFF3A271B) else Color(0xFF5A3C27)
+/** Texto claro sobre la madera. */
+private val Crema = Color(0xFFEFE4D2)
+private val Dorado = Color(0xFFD9BE8C)
 
-/** La repisa: una tabla delgada de nogal con su sombra. Sin adornos. */
+/** Las texturas de nogal (las mismas del PC), cargadas una sola vez. */
+@Composable
+private fun woodBack(): ImageBitmap = ImageBitmap.imageResource(R.drawable.madera_fondo)
+@Composable
+private fun woodPlank(): ImageBitmap = ImageBitmap.imageResource(R.drawable.madera_repisa)
+
+private const val PLANK_TOP = 4   // cara de arriba de la tabla (dp)
+private const val PLANK_FRONT = 11 // canto frontal (dp)
+private const val PLANK_SHADOW = 14 // sombra sobre el fondo (dp)
+/** Alto total que ocupa una repisa con su sombra. */
+val PlankHeight = (PLANK_TOP + PLANK_FRONT + PLANK_SHADOW).dp
+
+/**
+ * El mueble: fondo de nogal de veta vertical, laterales con canto y una cornisa arriba.
+ * Ocupa todo el ancho de la pantalla (sin márgenes crema).
+ */
+@Composable
+fun WoodCabinet(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+    val back = woodBack()
+    val plank = woodPlank()
+    val stile = 9.dp
+    Box(
+        modifier
+            .fullBleed(22.dp)
+            .drawBehind {
+                // Fondo del mueble (la veta es vertical: al deslizar no se nota el corte).
+                drawRect(ShaderBrush(ImageShader(back, TileMode.Repeated, TileMode.Repeated)))
+                drawRect(Color.Black.copy(alpha = 0.18f))
+                // Luz cálida que cae desde arriba y rincones en penumbra.
+                drawRect(
+                    Brush.radialGradient(
+                        0f to Color(0x2EFFC890), 1f to Color.Transparent,
+                        center = Offset(size.width / 2, -size.width * 0.2f), radius = size.width * 1.1f
+                    )
+                )
+                drawRect(
+                    Brush.horizontalGradient(
+                        0f to Color.Black.copy(alpha = 0.45f), 0.12f to Color.Transparent,
+                        0.88f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.45f)
+                    )
+                )
+            }
+            .drawWithContent {
+                drawContent()
+                val sw = stile.toPx()
+                val woodH = ShaderBrush(ImageShader(plank, TileMode.Repeated, TileMode.Repeated))
+                // Laterales del mueble con su canto iluminado.
+                for (left in listOf(true, false)) {
+                    val x = if (left) 0f else size.width - sw
+                    drawRect(ShaderBrush(ImageShader(back, TileMode.Repeated, TileMode.Repeated)), Offset(x, 0f), Size(sw, size.height))
+                    drawRect(Color.White.copy(alpha = 0.06f), Offset(x, 0f), Size(sw, size.height))
+                    val edge = if (left) x + sw - 1.dp.toPx() else x
+                    drawRect(Color(0x55E9C9A0), Offset(edge, 0f), Size(1.dp.toPx(), size.height))
+                    val sh = 10.dp.toPx()
+                    drawRect(
+                        Brush.horizontalGradient(
+                            if (left) listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent) else listOf(Color.Transparent, Color.Black.copy(alpha = 0.45f)),
+                            startX = if (left) x + sw else x - sh, endX = if (left) x + sw + sh else x
+                        ),
+                        Offset(if (left) x + sw else x - sh, 0f), Size(sh, size.height)
+                    )
+                }
+                // Cornisa de arriba.
+                val ch = 12.dp.toPx()
+                drawRect(woodH, Offset.Zero, Size(size.width, ch))
+                drawRect(
+                    Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.10f), Color.Black.copy(alpha = 0.35f)), endY = ch),
+                    Offset.Zero, Size(size.width, ch)
+                )
+                drawRect(Color(0x66E9C9A0), Offset(0f, ch - 1.dp.toPx()), Size(size.width, 1.dp.toPx()))
+                drawRect(
+                    Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent), startY = ch, endY = ch + 16.dp.toPx()),
+                    Offset(0f, ch), Size(size.width, 16.dp.toPx())
+                )
+            }
+            .padding(start = stile + 6.dp, end = stile + 6.dp, top = 12.dp),
+        content = content
+    )
+}
+
+/** Ignora el margen lateral de la hoja para que el mueble llegue de borde a borde. */
+private fun Modifier.fullBleed(side: Dp): Modifier = layout { m, c ->
+    val p = side.roundToPx()
+    val w = c.maxWidth + 2 * p
+    val pl = m.measure(c.copy(minWidth = w, maxWidth = w))
+    layout(c.maxWidth, pl.height) { pl.place(-p, 0) }
+}
+
+/** La repisa: tabla de nogal con cara de arriba iluminada, canto frontal y sombra sobre el fondo. */
 @Composable
 fun Plank(modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(WoodEdge))
-        Box(Modifier.fillMaxWidth().height(8.dp).background(Brush.verticalGradient(listOf(WoodTop, WoodBottom))))
-        Box(
-            Modifier.fillMaxWidth().height(10.dp)
-                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = if (C.dark) 0.45f else 0.16f), Color.Transparent)))
+    val plank = woodPlank()
+    Canvas(modifier.fillMaxWidth().height(PlankHeight)) {
+        val top = PLANK_TOP.dp.toPx()
+        val front = PLANK_FRONT.dp.toPx()
+        val wood = ShaderBrush(ImageShader(plank, TileMode.Repeated, TileMode.Repeated))
+        // Cara de arriba, donde se apoyan los discos.
+        drawRect(wood, Offset.Zero, Size(size.width, top))
+        drawRect(Color.White.copy(alpha = 0.16f), Offset.Zero, Size(size.width, top))
+        drawRect(Color.Black.copy(alpha = 0.25f), Offset.Zero, Size(size.width, 1.dp.toPx()))
+        // Canto frontal.
+        drawRect(wood, Offset(0f, top), Size(size.width, front))
+        drawRect(
+            Brush.verticalGradient(listOf(Color(0x30FFE2B8), Color.Transparent, Color.Black.copy(alpha = 0.35f)), startY = top, endY = top + front),
+            Offset(0f, top), Size(size.width, front)
+        )
+        drawRect(Color(0x70F0D3A8), Offset(0f, top), Size(size.width, 1.dp.toPx()))
+        // Sombra que la tabla proyecta sobre el fondo del mueble.
+        drawRect(
+            Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent), startY = top + front, endY = size.height),
+            Offset(0f, top + front), Size(size.width, size.height - top - front)
         )
     }
 }
@@ -153,32 +268,34 @@ private fun ShelfCover(a: Album, disc: Boolean, playing: Boolean, modifier: Modi
     if (disc) {
         Sleeve(a.tracks.first(), modifier.aspectRatio(1f), fast = playing)
     } else {
-        Box(modifier.aspectRatio(1f).shadow(5.dp, RoundedCornerShape(3.dp), ambientColor = C.Negro, spotColor = C.Negro)) {
-            Cover(a.tracks.first(), Modifier.aspectRatio(1f), corner = 3.dp)
+        Box(modifier.aspectRatio(1f).shadow(8.dp, RoundedCornerShape(2.dp), ambientColor = Color.Black, spotColor = Color.Black)) {
+            Cover(a.tracks.first(), Modifier.aspectRatio(1f), corner = 2.dp)
         }
     }
 }
 
 @Composable
-private fun ShelfLabel(a: Album, size: Int) {
-    Column(Modifier.fillMaxWidth().padding(top = 2.dp)) {
+private fun ShelfLabel(a: Album?, size: Int) {
+    Column(Modifier.fillMaxWidth().height((size * 2 + 8).dp)) {
+        if (a == null) return@Column
         Text(
-            a.title, style = Cuerpo.copy(fontSize = size.sp, fontWeight = FontWeight.SemiBold),
+            a.title, style = Cuerpo.copy(fontSize = size.sp, fontWeight = FontWeight.SemiBold, color = Crema),
             maxLines = 1, overflow = TextOverflow.Ellipsis
         )
-        Text(a.artist, style = Secundario.copy(fontSize = (size - 1).sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(a.artist, style = Secundario.copy(fontSize = (size - 1).sp, color = Crema.copy(alpha = 0.62f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
+/** Rótulo dentro del mueble (Favoritos, una letra, una década…). */
 @Composable
 fun ShelfTitle(text: String) {
     Text(
-        text, style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold),
-        modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)
+        text, style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold, color = Dorado),
+        modifier = Modifier.padding(start = 6.dp, top = 14.dp, bottom = 2.dp)
     )
 }
 
-/** Repisa horizontal (Favoritos, Volver a escuchar): se desliza de lado. */
+/** Repisa horizontal (Favoritos, Volver a escuchar): los discos se deslizan sobre una tabla fija. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ShelfRow(
@@ -192,19 +309,23 @@ fun ShelfRow(
 ) {
     Column {
         ShelfTitle(title)
-        LazyRow {
-            items(albums, key = { title + it.id }) { a ->
-                Column(
-                    Modifier.width(coverSize + 16.dp)
-                        .combinedClickable(onClick = { onOpen(a) }, onLongClick = { onLong(a) })
-                ) {
-                    ShelfCover(a, disc, playingAlbum == a.id, Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp).width(coverSize))
-                    Plank()
-                    Box(Modifier.padding(horizontal = 8.dp)) { ShelfLabel(a, 12) }
+        Box {
+            Plank(Modifier.padding(top = 10.dp + coverSize))
+            LazyRow {
+                items(albums, key = { title + it.id }) { a ->
+                    Column(
+                        Modifier.width(coverSize + 14.dp).padding(horizontal = 7.dp)
+                            .combinedClickable(onClick = { onOpen(a) }, onLongClick = { onLong(a) })
+                    ) {
+                        Spacer(Modifier.height(10.dp))
+                        ShelfCover(a, disc, playingAlbum == a.id, Modifier.width(coverSize))
+                        Spacer(Modifier.height((PLANK_TOP + PLANK_FRONT + 4).dp))
+                        ShelfLabel(a, 12)
+                    }
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(4.dp))
     }
 }
 
@@ -218,25 +339,32 @@ fun LazyListScope.shelfGrid(
     onOpen: (Album) -> Unit,
     onLong: (Album) -> Unit,
 ) {
-    val gap = when (columns) { 2 -> 10.dp; 3 -> 8.dp; 4 -> 6.dp; else -> 4.dp }
+    val gap = when (columns) { 2 -> 12.dp; 3 -> 8.dp; 4 -> 6.dp; else -> 4.dp }
     val labels = columns <= 4
+    val labelSize = if (columns >= 4) 11 else 12
     sections.forEachIndexed { si, sec ->
         if (sec.label != null) item(key = "sec$si" + sec.label) { ShelfTitle(sec.label) }
         sec.albums.chunked(columns).forEachIndexed { ri, row ->
             item(key = "row$si-$ri-" + row.first().id) {
-                Row(Modifier.fillMaxWidth().padding(bottom = if (labels) 14.dp else 8.dp)) {
-                    for (i in 0 until columns) {
-                        val a = row.getOrNull(i)
-                        Column(
-                            Modifier.weight(1f)
-                                .then(if (a != null) Modifier.combinedClickable(onClick = { onOpen(a) }, onLongClick = { onLong(a) }) else Modifier)
-                        ) {
-                            Box(Modifier.fillMaxWidth().padding(start = gap, end = gap, top = gap + 4.dp).aspectRatio(1f)) {
+                Column(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(top = gap + 8.dp)) {
+                        for (i in 0 until columns) {
+                            val a = row.getOrNull(i)
+                            Box(
+                                Modifier.weight(1f).padding(horizontal = gap)
+                                    .then(if (a != null) Modifier.combinedClickable(onClick = { onOpen(a) }, onLongClick = { onLong(a) }) else Modifier)
+                            ) {
                                 if (a != null) ShelfCover(a, disc, playingAlbum() == a.id, Modifier.fillMaxWidth())
+                                else Spacer(Modifier.fillMaxWidth().aspectRatio(1f))
                             }
-                            Plank()
-                            if (labels) Box(Modifier.padding(horizontal = gap)) {
-                                if (a != null) ShelfLabel(a, if (columns >= 4) 11 else 12)
+                        }
+                    }
+                    // Una sola tabla para toda la fila: la veta corre de lado a lado sin cortes.
+                    Box {
+                        Plank()
+                        if (labels) Row(Modifier.fillMaxWidth().padding(top = (PLANK_TOP + PLANK_FRONT + 4).dp)) {
+                            for (i in 0 until columns) {
+                                Box(Modifier.weight(1f).padding(horizontal = gap)) { ShelfLabel(row.getOrNull(i), labelSize) }
                             }
                         }
                     }
