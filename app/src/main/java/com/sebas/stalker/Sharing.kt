@@ -126,7 +126,7 @@ object Sharing {
         }
     } catch (e: Exception) {
         null
-    }
+    } ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } // file:// y otros sin nombre
 
     /** Qué es lo que nos mandaron: un disco (zip), una canción o nada que sirva. */
     enum class Kind { DISC, SONG, OTHER }
