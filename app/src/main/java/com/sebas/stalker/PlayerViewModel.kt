@@ -306,6 +306,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (i in 0 until c.mediaItemCount && i != c.currentMediaItemIndex) c.removeMediaItem(i)
     }
 
+    /** Descarga de LRCLIB las letras que falten en toda la biblioteca. */
+    fun fetchAllLyrics() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            Lyrics.fetchAll(getApplication(), Engine.visible(Engine.tracks.value, Engine.hiddenAlbums.value, Engine.hiddenTracks.value))
+        }
+    }
+
     fun checkUpdatesQuiet() {
         viewModelScope.launch { Updates.check(getApplication()) }
     }

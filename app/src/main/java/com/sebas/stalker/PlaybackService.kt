@@ -349,6 +349,8 @@ class PlaybackService : MediaSessionService() {
             output.apply(Engine.outputMode.value, info)
             applyEq()
             applyReplayGain(tags)
+            // Si la canción no trae letra, se busca sola en LRCLIB (en segundo plano).
+            if (track != null) launch(kotlinx.coroutines.Dispatchers.IO) { Lyrics.auto(this@PlaybackService, track, tags) }
         }
     }
 

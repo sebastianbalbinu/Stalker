@@ -41,6 +41,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -424,8 +427,16 @@ fun parseLyrics(raw: String): Pair<List<LyricLine>, Boolean> {
 }
 
 @Composable
-fun LyricsSheet(tags: Map<String, String>, posMs: Long, title: String?, onSeek: (Long) -> Unit, onDismiss: () -> Unit) {
-    val raw = tags["LYRICS"] ?: tags["SYNCEDLYRICS"] ?: tags["UNSYNCEDLYRICS"] ?: tags["UNSYNCED LYRICS"]
+fun LyricsSheet(tags: Map<String, String>, posMs: Long, track: com.sebas.stalker.Track?, onSeek: (Long) -> Unit, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val changes by com.sebas.stalker.Lyrics.changes.collectAsState()
+    val fromFile = com.sebas.stalker.Lyrics.embedded(tags)
+    // La del archivo manda; si no trae, la que descargamos de LRCLIB.
+    val downloaded = remember(track?.id, changes) { track?.let { com.sebas.stalker.Lyrics.local(ctx, it) } }
+    val raw = fromFile ?: downloaded
+    var searching by remember(track?.id) { mutableStateOf(false) }
+    var notFound by remember(track?.id) { mutableStateOf(false) }
     val parsed = remember(raw) { raw?.let { parseLyrics(it) } }
     val listState = rememberLazyListState()
     val lines = parsed?.first ?: emptyList()
@@ -434,18 +445,44 @@ fun LyricsSheet(tags: Map<String, String>, posMs: Long, title: String?, onSeek: 
     LaunchedEffect(current) {
         if (current >= 0) listState.animateScrollToItem((current - 2).coerceAtLeast(0))
     }
+    fun search() {
+        val t = track ?: return
+        searching = true
+        notFound = false
+        scope.launch {
+            val ok = com.sebas.stalker.Lyrics.fetch(ctx, t, force = true)
+            searching = false
+            notFound = !ok
+        }
+    }
     StalkerSheet(onDismiss) {
-        Text(title ?: tr("Letra"), style = Titulo.copy(fontSize = 24.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(if (synced) tr("Sincronizada · toca una línea para ir ahí") else tr("Letra"), style = Secundario)
+        Text(track?.title ?: tr("Letra"), style = Titulo.copy(fontSize = 24.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            when {
+                synced && fromFile == null -> tr("Sincronizada · de LRCLIB · toca una línea para ir ahí")
+                synced -> tr("Sincronizada · toca una línea para ir ahí")
+                raw != null && fromFile == null -> tr("Letra · de LRCLIB")
+                else -> tr("Letra")
+            },
+            style = Secundario
+        )
         Spacer(Modifier.height(10.dp))
         if (lines.isEmpty()) {
             Text(
-                tr("Este archivo no trae letra. Puedes incrustarla en tus FLAC con MusicBrainz Picard o Mp3tag (campo LYRICS, en formato LRC si la quieres sincronizada)."),
+                when {
+                    searching -> tr("Buscando la letra en LRCLIB…")
+                    notFound -> tr("No encontramos la letra de esta canción. LRCLIB la tiene para la mayoría de los discos, pero no todos.")
+                    else -> tr("Esta canción no trae letra. Stalker puede buscarla gratis en LRCLIB, casi siempre sincronizada.")
+                },
                 style = Cuerpo.copy(color = C.Tierra, lineHeight = 22.sp),
-                modifier = Modifier.padding(vertical = 20.dp)
+                modifier = Modifier.padding(vertical = 16.dp)
             )
+            if (!searching && track != null) {
+                Pill(if (notFound) "Buscar otra vez" else "Buscar letra", selected = true, modifier = Modifier.fillMaxWidth()) { search() }
+                Spacer(Modifier.height(12.dp))
+            }
         } else {
-            LazyColumn(Modifier.heightIn(max = 560.dp), state = listState, contentPadding = PaddingValues(bottom = 40.dp)) {
+            LazyColumn(Modifier.heightIn(max = 560.dp), state = listState, contentPadding = PaddingValues(bottom = 16.dp)) {
                 itemsIndexed(lines) { i, l ->
                     val on = i == current
                     Text(
@@ -463,6 +500,14 @@ fun LyricsSheet(tags: Map<String, String>, posMs: Long, title: String?, onSeek: 
                         modifier = Modifier.fillMaxWidth()
                             .then(if (synced) Modifier.clickable { onSeek(l.ms) } else Modifier)
                             .padding(vertical = 6.dp)
+                    )
+                }
+                if (fromFile == null && track != null) item {
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        tr("¿No es la letra correcta? Quitarla"),
+                        style = Secundario.copy(fontSize = 12.sp, color = C.Piedra),
+                        modifier = Modifier.clickable { com.sebas.stalker.Lyrics.remove(ctx, track) }.padding(vertical = 8.dp)
                     )
                 }
             }

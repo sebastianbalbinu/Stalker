@@ -63,6 +63,8 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
     val night by Engine.nightMode.collectAsState()
     val rg by Engine.replayGain.collectAsState()
     val ctx = LocalContext.current
+    var autoLyrics by remember { mutableStateOf(com.sebas.stalker.Lyrics.autoEnabled(ctx)) }
+    val lyricsBatch by com.sebas.stalker.Lyrics.batchStatus.collectAsState()
     var autoUpdate by remember { mutableStateOf(com.sebas.stalker.Updates.autoEnabled(ctx)) }
     val version = remember {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "1.0"
@@ -155,6 +157,21 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
                         Pill(m, selected = nextOrder == m, modifier = Modifier.weight(1f)) { Engine.setNextOrder(m) }
                     }
                 }
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Text(tr("LETRAS"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Spacer(Modifier.height(10.dp))
+            Card {
+                ToggleRow(Ico.Lyrics, tr("Buscar letras solas"), tr("Si una canción no trae letra, se descarga gratis de LRCLIB al escucharla"), autoLyrics) {
+                    autoLyrics = it
+                    com.sebas.stalker.Lyrics.setAuto(ctx, it)
+                }
+                HorizontalDivider(color = C.Arena, thickness = 1.dp)
+                SettingRow(
+                    Ico.Download, tr("Descargar letras de toda la biblioteca"),
+                    lyricsBatch.ifBlank { tr("Una vez, en segundo plano. Quedan guardadas en la app") }
+                ) { vm.fetchAllLyrics() }
             }
 
             Spacer(Modifier.height(18.dp))
