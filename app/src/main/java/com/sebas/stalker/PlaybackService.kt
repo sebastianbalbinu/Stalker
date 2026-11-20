@@ -242,7 +242,7 @@ class PlaybackService : MediaSessionService() {
     private fun continueWithNextDisc() {
         val (tracks, title) = upcomingDisc() ?: return
         scope.launch {
-            delay(NEXT_DISC_PAUSE_MS) // lo que tarda cambiar un vinilo
+            if (Engine.discPause.value) delay(NEXT_DISC_PAUSE_MS) // lo que tarda cambiar un vinilo
             if (player.playbackState != Player.STATE_ENDED) return@launch // alguien eligió otra cosa
             loadDisc(tracks, title)
         }
@@ -280,7 +280,7 @@ class PlaybackService : MediaSessionService() {
         player.removeMediaItems(0, idx)
         Engine.setQueueTitle(title)
         Engine.flipPending.value = false
-        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && !Engine.sleepEndOfDisco.value) {
+        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && !Engine.sleepEndOfDisco.value && Engine.discPause.value) {
             // Lo que tarda cambiar un vinilo.
             val token = ++discChange
             player.pause()

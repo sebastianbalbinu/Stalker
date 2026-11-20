@@ -56,6 +56,7 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
     val purist by Engine.purist.collectAsState()
     val shared by Engine.includeShared.collectAsState()
     val continuous by Engine.continuous.collectAsState()
+    val discPause by Engine.discPause.collectAsState()
     val language by com.sebas.stalker.I18n.choice.collectAsState()
     val nextOrder by Engine.nextOrder.collectAsState()
     val updateStatus by com.sebas.stalker.Updates.status.collectAsState()
@@ -146,8 +147,14 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
             Text(tr("REPRODUCCIÓN CONTINUA"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             Card {
-                ToggleRow(Ico.Repeat, tr("Seguir con otro disco"), tr("Cuando termina un disco, el brazo vuelve y entra el siguiente"), continuous) {
+                ToggleRow(Ico.Repeat, tr("Seguir con otro disco"), tr("Cuando termina un disco o una lista, entra el siguiente disco sin cortes"), continuous) {
                     Engine.setContinuous(it)
+                }
+                if (continuous) {
+                    HorizontalDivider(color = C.Arena, thickness = 1.dp)
+                    ToggleRow(Ico.Disc, tr("Pausa entre discos"), tr("2 segundos de silencio, como al cambiar un vinilo"), discPause) {
+                        Engine.setDiscPause(it)
+                    }
                 }
             }
             if (continuous) {

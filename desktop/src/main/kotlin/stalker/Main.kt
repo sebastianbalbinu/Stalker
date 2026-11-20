@@ -120,7 +120,6 @@ class AppState(val player: Player) {
             val q = player.queue
             val (next, title) = Continuous.next(albums, favorites, q, player.queueTitle) ?: return@launch
             if (!manual) {
-                delay(Continuous.PAUSE_MS)
                 if (player.playing || player.queue !== q) return@launch // alguien eligió otra cosa
             }
             player.setQueue(next, 0, title, play = true)

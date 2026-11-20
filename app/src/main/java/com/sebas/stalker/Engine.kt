@@ -136,6 +136,8 @@ object Engine {
     val continuous = MutableStateFlow(true)
     /** Qué disco sigue: "Estantería", "Al azar" o "Mismo artista". */
     val nextOrder = MutableStateFlow("Estantería")
+    /** Pausa de 2 s entre discos, como al cambiar un vinilo (apagada: sigue sin cortes). */
+    val discPause = MutableStateFlow(false)
     /** Discos que ya sonaron en esta cadena continua (para no repetir hasta pasar por todos). */
     private val chainPlayed = mutableSetOf<String>()
 
@@ -188,6 +190,7 @@ object Engine {
         includeShared.value = p.getBoolean("includeShared", true)
         purist.value = p.getBoolean("purist", false)
         continuous.value = p.getBoolean("continuous", true)
+        discPause.value = p.getBoolean("discPause", false)
         libraryColumns.value = p.getInt("libraryColumns", 3).coerceIn(2, 5)
         librarySort.value = p.getString("librarySort", "Álbum") ?: "Álbum"
         sortReversed.value = p.getBoolean("sortReversed", false)
@@ -265,6 +268,11 @@ object Engine {
         emptyMap()
     }
 
+    fun setDiscPause(on: Boolean) {
+        discPause.value = on
+        prefs?.edit()?.putBoolean("discPause", on)?.apply()
+    }
+
     fun setContinuous(on: Boolean) {
         continuous.value = on
         prefs?.edit()?.putBoolean("continuous", on)?.apply()
@@ -320,14 +328,14 @@ object Engine {
             return discoTracks(d).filter { it.id !in hiddenTracks.value } to d.name
         }
 
-        // Un álbum completo (o parte de él): sigue el siguiente álbum de la estantería.
-        val albumIds = queue.map { it.albumId }.distinct()
-        if (albumIds.size != 1) return null
+        // Un álbum (o cualquier otra lista: canciones sueltas, recibidos, un artista…):
+        // sigue el álbum que viene después del de la última canción. La música nunca se detiene sola.
+        val albumIds = listOf(queue.last().albumId)
         val shelf = albums(visible(tracks.value, hiddenAlbums.value, hiddenTracks.value))
         if (shelf.isEmpty()) return null
         val keys = shelf.map { "a" + it.id }
         val artists = shelf.associate { "a" + it.id to it.artist.lowercase() }
-        val currentArtist = queue.first().artist.lowercase()
+        val currentArtist = queue.last().artist.lowercase()
         val next = pickNext(keys, "a" + albumIds.first(), artists, currentArtist) ?: return null
         val a = shelf.first { "a" + it.id == next }
         return a.tracks to a.title
@@ -338,7 +346,8 @@ object Engine {
 
     private fun pickNext(keys: List<String>, current: String, artists: Map<String, String>, fallbackArtist: String? = null): String? {
         if (keys.isEmpty()) return null
-        if (keys.size == 1 && keys[0] == current) return null
+        // Un solo disco en la estantería: vuelve a sonar desde el principio.
+        if (keys.size == 1) return keys[0]
         chainPlayed.add(current)
         if (keys.all { it in chainPlayed }) { chainPlayed.clear(); chainPlayed.add(current) }
         val at = keys.indexOf(current)
