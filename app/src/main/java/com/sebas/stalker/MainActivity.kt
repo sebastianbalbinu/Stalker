@@ -22,6 +22,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.flow.first
 import com.sebas.stalker.ui.IntroScreen
 import androidx.compose.runtime.mutableStateOf
@@ -146,11 +148,14 @@ class MainActivity : ComponentActivity() {
                 "Claro" -> false
                 else -> system
             }
-            // Pantalla de carga oscura: se queda al menos un instante y se va cuando la biblioteca está lista.
+            // Pantalla de carga: el disco gira mientras la biblioteca se prepara y se despide con un fundido suave.
             var intro by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(true) }
+            val leave = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(if (intro) 0f else 1f) }
             LaunchedEffect(Unit) {
-                kotlinx.coroutines.delay(1100)
-                kotlinx.coroutines.withTimeoutOrNull(2400) { Engine.scanned.first { it } }
+                if (!intro) return@LaunchedEffect
+                kotlinx.coroutines.delay(900)
+                kotlinx.coroutines.withTimeoutOrNull(2600) { Engine.scanned.first { it } }
+                leave.animateTo(1f, androidx.compose.animation.core.tween(820, easing = com.sebas.stalker.ui.AppleEase))
                 intro = false
             }
             LaunchedEffect(dark, intro) {
@@ -161,7 +166,14 @@ class MainActivity : ComponentActivity() {
             }
             // Al cambiar de idioma se redibuja toda la interfaz.
             val language by I18n.choice.collectAsState()
-            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+            // La app aparece con el fundido: sube la opacidad y se asienta desde un 97 %.
+            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().graphicsLayer {
+                val p = leave.value
+                alpha = p
+                val sc = 0.97f + 0.03f * p
+                scaleX = sc; scaleY = sc
+            }) {
             androidx.compose.runtime.key(language) {
             StalkerApp(
                 vm = vm,
@@ -175,11 +187,8 @@ class MainActivity : ComponentActivity() {
                 onImportDisc = { discLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
             )
             }
-            androidx.compose.animation.AnimatedVisibility(
-                visible = intro,
-                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(0)),
-                exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(550)),
-            ) { IntroScreen(null) }
+            }
+            if (intro) IntroScreen { leave.value }
             }
         }
     }

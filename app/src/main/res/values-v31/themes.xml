@@ -6,6 +6,6 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <!-- Pantalla de arranque de Android 12+: oscura, con el ícono de Stalker -->
         <item name="android:windowSplashScreenBackground">@color/sala</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">@color/sala</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_vacio</item>
     </style>
 </resources>

@@ -119,15 +119,15 @@ fun LibraryScreen(
     val albums = remember(tracks) { Engine.albums(tracks) }
     val songs = remember(tracks) { tracks.sortedBy { it.title.lowercase() } }
 
-    val shownAlbums = albums.filter { matches(query, it.title, it.artist) }
+    val shownAlbums = remember(albums, query) { albums.filter { matches(query, it.title, it.artist) } }
     val recent = remember(albums, lastPlayed) {
         albums.filter { it.id in lastPlayed }.sortedByDescending { lastPlayed[it.id] ?: 0L }.take(10)
     }
-    val shownFavs = albums.filter { it.id in favs && matches(query, it.title, it.artist) }
-    val shownSongs = songs.filter { matches(query, it.title, it.artist, it.album) }
+    val shownFavs = remember(albums, favs, query) { albums.filter { it.id in favs && matches(query, it.title, it.artist) } }
+    val shownSongs = remember(songs, query) { songs.filter { matches(query, it.title, it.artist, it.album) } }
     val shownDiscos = discos.filter { matches(query, it.name) }
     val received = remember(tracks) { tracks.filter { it.source != null }.sortedByDescending { it.id } }
-    val shownReceived = received.filter { matches(query, it.title, it.artist, it.album) }
+    val shownReceived = remember(received, query) { received.filter { matches(query, it.title, it.artist, it.album) } }
     val currentAlbum = current?.albumId
 
     CurtainSheet {
