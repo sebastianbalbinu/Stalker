@@ -41,7 +41,9 @@ object Library {
             MediaStore.Audio.Media.SIZE,
         )
         val pathCol = if (Build.VERSION.SDK_INT >= 29) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
-        val projection2 = projection + pathCol
+        // Artista del álbum: la columna existe desde Android 11.
+        val albumArtistCol = if (Build.VERSION.SDK_INT >= 30) MediaStore.Audio.Media.ALBUM_ARTIST else null
+        val projection2 = projection + pathCol + listOfNotNull(albumArtistCol)
         val selection = buildString {
             // Todo el audio del teléfono (cualquier carpeta, también la tarjeta SD), menos tonos y grabaciones.
             append("${MediaStore.Audio.Media.IS_RINGTONE} = 0")
@@ -64,6 +66,7 @@ object Library {
                 val iYear = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
                 val iPath = c.getColumnIndexOrThrow(pathCol)
                 val iSize = c.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+                val iAlbumArtist = albumArtistCol?.let { c.getColumnIndex(it) } ?: -1
                 while (c.moveToNext()) {
                     val id = c.getLong(iId)
                     val path = c.getString(iPath).orEmpty()
@@ -71,6 +74,8 @@ object Library {
                     val dur = c.getLong(iDur)
                     if (!looksLikeMusic(path, mime, dur)) continue
                     val artist = c.getString(iArtist)
+                    val rawTrack = c.getInt(iTrack)
+                    val albumArtist = if (iAlbumArtist >= 0) c.getString(iAlbumArtist)?.takeIf { it.isNotBlank() && it != "<unknown>" } else null
                     out.add(
                         Track(
                             id = id,
@@ -79,7 +84,9 @@ object Library {
                             artist = if (artist.isNullOrBlank() || artist == "<unknown>") tr("Artista desconocido") else artist,
                             album = c.getString(iAlbum) ?: tr("Sin álbum"),
                             albumId = c.getLong(iAlbumId),
-                            trackNo = c.getInt(iTrack) % 1000,
+                            trackNo = rawTrack % 1000,
+                            discNo = (rawTrack / 1000).coerceAtLeast(1),
+                            albumArtist = albumArtist,
                             durationMs = dur,
                             mime = mime,
                             year = c.getInt(iYear),
@@ -92,7 +99,56 @@ object Library {
         } catch (e: Exception) {
             // Sin permiso o error del sistema: biblioteca vacía.
         }
-        out
+        joinMultiDisc(out)
+    }
+
+    private val discSuffix = Regex(
+        """\s*[(\[{–—:,-]?\s*\b(cd|disc|disk|disco|disque)\s*\.?\s*(\d{1,2})\s*(of|de|/)?\s*\d{0,2}\s*[)\]}]?\s*$""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /**
+     * Discos dobles: "Álbum (CD1)" y "Álbum (CD2)", o el mismo álbum en dos carpetas, se juntan
+     * en un solo álbum con sus discos en orden.
+     */
+    fun joinMultiDisc(tracks: List<Track>): List<Track> {
+        if (tracks.isEmpty()) return tracks
+        data class Info(val base: String, val disc: Int?)
+        fun info(album: String): Info {
+            val m = discSuffix.find(album) ?: return Info(album.trim(), null)
+            val base = album.substring(0, m.range.first).trim().trimEnd('-', '–', '—', ':', ',').trim()
+            return if (base.isEmpty()) Info(album.trim(), null) else Info(base, m.groupValues[2].toIntOrNull())
+        }
+        val byAlbum = tracks.groupBy { it.albumId }
+        // Clave de unión: título sin "CD n" + artista del álbum (o el artista que más aparece).
+        val keyOf = HashMap<Long, String>()
+        val baseOf = HashMap<Long, Info>()
+        for ((id, ts) in byAlbum) {
+            val inf = info(ts.first().album)
+            baseOf[id] = inf
+            val who = ts.firstNotNullOfOrNull { it.albumArtist }
+                ?: ts.groupingBy { it.artist }.eachCount().maxByOrNull { it.value }?.key.orEmpty()
+            keyOf[id] = inf.base.lowercase() + "|" + who.lowercase()
+        }
+        val groups = byAlbum.keys.groupBy { keyOf[it]!! }
+        if (groups.values.none { it.size > 1 } && baseOf.values.none { it.disc != null }) return tracks
+        val out = ArrayList<Track>(tracks.size)
+        for ((_, ids) in groups) {
+            val canonical = ids.min()
+            // Orden de los discos: por el número del título, o por el número de disco de las pistas.
+            val ordered = ids.sortedWith(compareBy<Long> { baseOf[it]?.disc ?: byAlbum[it]!!.minOf { t -> t.discNo } }.thenBy { it })
+            ordered.forEachIndexed { i, id ->
+                val inf = baseOf[id]!!
+                for (t in byAlbum[id]!!) {
+                    val disc = when {
+                        ids.size == 1 -> inf.disc ?: t.discNo
+                        else -> inf.disc ?: if (t.discNo > 1) t.discNo else i + 1
+                    }
+                    out += t.copy(albumId = canonical, album = inf.base, discNo = disc)
+                }
+            }
+        }
+        return out
     }
 
     /** Carpetas que casi nunca son música: notas de voz, grabaciones, tonos. */
@@ -271,6 +327,12 @@ object ArtCache {
 
     fun peek(albumId: Long): ImageBitmap? = cache.get(albumId)
 
+    /** Olvida que este álbum no tenía portada (llegó una nueva). */
+    fun forget(albumId: Long) {
+        synchronized(missing) { missing.remove(albumId) }
+        cache.remove(albumId)
+    }
+
     suspend fun load(context: Context, track: Track): ImageBitmap? {
         cache.get(track.albumId)?.let { return it }
         val job = synchronized(inFlight) {
@@ -295,8 +357,11 @@ object ArtCache {
             }
         }
         if (bmp == null) bmp = embedded(context, track.uri)
+        // Portada descargada de Cover Art Archive, si el archivo no traía.
+        if (bmp == null) bmp = try { Covers.local(context, track, ART_PX) } catch (e: Exception) { null }
         return if (bmp == null) {
             synchronized(missing) { missing.add(track.albumId) }
+            Covers.request(context, track)
             null
         } else {
             val img = bmp.asImageBitmap()

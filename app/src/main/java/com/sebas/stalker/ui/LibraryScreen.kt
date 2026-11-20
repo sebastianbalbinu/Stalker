@@ -71,6 +71,7 @@ sealed class Detail {
     data class OfAlbum(val albumId: Long) : Detail()
     data class OfDisco(val discoId: Long) : Detail()
     data class PickSongs(val discoId: Long) : Detail()
+    data class OfArtist(val name: String) : Detail()
 }
 
 private fun matches(q: String, vararg fields: String): Boolean =
@@ -513,6 +514,8 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
     val scope = rememberCoroutineScope()
     var songMenu by remember { mutableStateOf<Track?>(null) }
     var addToDisco by remember { mutableStateOf<List<Long>?>(null) }
+    var analyzing by remember { mutableStateOf<Track?>(null) }
+    var showInfo by remember { mutableStateOf(false) }
 
     val disco: Disco? = (detail as? Detail.OfDisco)?.let { d -> discos.firstOrNull { it.id == d.discoId } }
     val album: Album? = (detail as? Detail.OfAlbum)?.let { d ->
@@ -564,7 +567,10 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
             Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (disco != null) Text(tr("MI DISCO"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, color = C.Rojo, fontWeight = FontWeight.SemiBold))
                 Text(title, style = Titulo.copy(fontSize = 28.sp, lineHeight = 32.sp), maxLines = 3, overflow = TextOverflow.Ellipsis)
-                Text(artist, style = Cuerpo.copy(fontSize = 14.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    artist, style = Cuerpo.copy(fontSize = 14.sp, color = if (album != null) C.Rojo else C.Carbon), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = if (album != null) Modifier.clickable { onOpen(Detail.OfArtist(artist)) } else Modifier
+                )
                 Text(tr("%s%s canciones · %s min", year, tracks.size, total / 60000), style = Secundario.copy(fontSize = 12.sp))
             }
         }
@@ -589,6 +595,22 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
                 Text(tr("Aleatorio"), style = Cuerpo.copy(fontWeight = FontWeight.Medium))
             }
         }
+        if (album != null && tracks.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    Modifier.clip(RoundedCornerShape(16.dp)).background(C.Arena).clickable { showInfo = true }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Ico.Info, null, tint = C.Carbon, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(tr("Sobre el disco"), style = Secundario.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = C.Carbon))
+                }
+                val probe = tracks[tracks.size / 2]
+                QualityChip(probe) { analyzing = probe }
+            }
+        }
         Spacer(Modifier.height(12.dp))
         if (disco != null && tracks.isEmpty()) {
             Box(Modifier.fillMaxWidth().weight(1f)) {
@@ -609,9 +631,19 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
                     Pill("Listo", selected = true) { ordering = false }
                 }
             }
+            val multiDisc = disco == null && tracks.map { it.discNo }.distinct().size > 1
             LazyColumn(contentPadding = PaddingValues(bottom = 200.dp)) {
                 itemsIndexed(tracks, key = { _, t -> t.id }) { i, t ->
-                    if (tracks.size >= 4 && (i == 0 || i == half)) {
+                    // Álbum doble: un rótulo por disco en lugar de lados A y B.
+                    if (multiDisc && (i == 0 || tracks[i - 1].discNo != t.discNo)) {
+                        val discTracks = tracks.filter { it.discNo == t.discNo }
+                        Text(
+                            tr("DISCO %s", t.discNo) + " · " + fmtTime(discTracks.sumOf { it.durationMs }),
+                            style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold, color = C.Tierra),
+                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                        )
+                    }
+                    if (!multiDisc && tracks.size >= 4 && (i == 0 || i == half)) {
                         val side = if (i == 0) sideA else sideB
                         val long = disco != null && side > 22 * 60_000L
                         Row(Modifier.padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -687,6 +719,8 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
         )
         ActionSheet(title, artist, actions, onDismiss = { menu = false })
     }
+    analyzing?.let { t -> AnalysisSheet(t) { analyzing = null } }
+    if (showInfo && album != null) AlbumInfoSheet(album, onDismiss = { showInfo = false }, onArtist = { showInfo = false; onOpen(Detail.OfArtist(it)) })
     songMenu?.let { t ->
         val queueActions = listOf(
             SheetAction(tr("Reproducir después"), Ico.PlayNext) { vm.playNext(listOf(t)) },
@@ -698,6 +732,7 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
             },
         ) else listOf(
             SheetAction(tr("Añadir a un disco"), Ico.Disc) { addToDisco = listOf(t.id) },
+            SheetAction(tr("Analizar calidad real"), Ico.Wave) { analyzing = t },
             SheetAction(tr("Ocultar canción"), Ico.Hide, destructive = true) { Engine.hideTrack(t.id) },
         )
         ActionSheet(t.title, t.artist, actions, onDismiss = { songMenu = null })

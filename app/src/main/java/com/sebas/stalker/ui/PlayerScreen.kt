@@ -561,6 +561,8 @@ fun Vinyl(
             },
         contentAlignment = Alignment.Center
     ) {
+        // El plato de aluminio cepillado: queda debajo del vinilo y su borde estroboscópico gira con él.
+        Platter(angle, Modifier.fillMaxSize(0.955f))
         Box(
             Modifier.fillMaxSize(0.9f).graphicsLayer {
                 translationX = swipeDx.floatValue * 0.25f
@@ -619,6 +621,55 @@ fun Vinyl(
             }
         }
         Tonearm(armDeg.floatValue, Modifier.fillMaxSize())
+        // Piloto de encendido y velocidad, como en las tornamesas de verdad.
+        Row(Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            val glow = if (playing) C.Rojo else C.Piedra.copy(alpha = 0.5f)
+            Box(
+                Modifier.size(7.dp)
+                    .then(if (playing) Modifier.shadow(6.dp, CircleShape, ambientColor = C.Rojo, spotColor = C.Rojo) else Modifier)
+                    .clip(CircleShape).background(glow)
+            )
+            Spacer(Modifier.width(7.dp))
+            Text("33⅓", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 1.sp, color = if (playing) C.Carbon else C.Piedra))
+        }
+    }
+}
+
+/** Plato de aluminio cepillado con puntos estroboscópicos en el canto (giran a 33⅓). */
+@Composable
+private fun Platter(angle: androidx.compose.runtime.MutableFloatState, modifier: Modifier) {
+    Box(modifier.shadow(16.dp, CircleShape, ambientColor = C.Negro, spotColor = C.Negro)) {
+        // Aluminio: el brillo no gira (la luz está quieta), solo los puntos.
+        Canvas(Modifier.fillMaxSize()) {
+            val r = size.minDimension / 2f
+            val c = center
+            drawCircle(
+                Brush.sweepGradient(
+                    0f to Color(0xFF9C9891), 0.08f to Color(0xFFE6E3DD), 0.16f to Color(0xFFA9A59E),
+                    0.33f to Color(0xFFCFCBC4), 0.42f to Color(0xFF8E8A83), 0.58f to Color(0xFFDAD6CF),
+                    0.66f to Color(0xFF9A968F), 0.83f to Color(0xFFEDEAE4), 0.92f to Color(0xFFA19D96), 1f to Color(0xFF9C9891),
+                    center = c
+                ),
+                r, c
+            )
+            drawCircle(Color.White.copy(alpha = 0.55f), r - 1f, c, style = Stroke(width = 1.4f))
+            drawCircle(Color.Black.copy(alpha = 0.35f), r * 0.955f, c, style = Stroke(width = 1.2f))
+            // Goma bajo el disco
+            drawCircle(Color(0xFF151413), r * 0.95f, c)
+        }
+        Canvas(Modifier.fillMaxSize().graphicsLayer { rotationZ = angle.floatValue }) {
+            val r = size.minDimension / 2f
+            val c = center
+            // Cuatro filas de puntos estroboscópicos en el canto.
+            val rows = listOf(r * 0.992f to 120, r * 0.979f to 108, r * 0.966f to 100)
+            for ((rr, n) in rows) {
+                for (i in 0 until n) {
+                    val a = (i * 2 * Math.PI / n).toFloat()
+                    val p = Offset(c.x + rr * kotlin.math.cos(a), c.y + rr * kotlin.math.sin(a))
+                    drawCircle(Color(0xFF3C3935).copy(alpha = 0.55f), r * 0.0042f, p)
+                }
+            }
+        }
     }
 }
 
@@ -640,7 +691,34 @@ fun Tonearm(deg: Float, modifier: Modifier) {
             drawLine(Color.Black.copy(alpha = 0.28f), pivot + sh, a + sh, strokeWidth = tube, cap = StrokeCap.Round)
             drawLine(Color.Black.copy(alpha = 0.28f), a + sh, b + sh, strokeWidth = tube, cap = StrokeCap.Round)
         }
+        // Apoyabrazo: el poste donde descansa el brazo cuando no suena.
+        run {
+            val restA = Math.toRadians(Deck.REST.toDouble())
+            val along = w * 0.30f
+            val rest = Offset(
+                pivot.x - along * kotlin.math.sin(restA).toFloat() + w * 0.03f,
+                pivot.y + along * kotlin.math.cos(restA).toFloat()
+            )
+            drawCircle(Color.Black.copy(alpha = 0.25f), w * 0.022f, rest + Offset(w * 0.006f, w * 0.009f))
+            drawCircle(Color(0xFF2A2623), w * 0.02f, rest)
+            drawCircle(Color(0xFF8F8372), w * 0.012f, rest)
+        }
+        // Base del pivote: anillo moleteado.
+        drawCircle(Color.Black.copy(alpha = 0.3f), w * 0.088f, pivot + Offset(w * 0.008f, w * 0.012f))
+        drawCircle(Color(0xFF1A1816), w * 0.085f, pivot)
+        for (i in 0 until 36) {
+            val a = (i * 2 * Math.PI / 36).toFloat()
+            drawLine(
+                Color(0xFF3A3531), Offset(pivot.x + w * 0.072f * kotlin.math.cos(a), pivot.y + w * 0.072f * kotlin.math.sin(a)),
+                Offset(pivot.x + w * 0.083f * kotlin.math.cos(a), pivot.y + w * 0.083f * kotlin.math.sin(a)), strokeWidth = 1.2f
+            )
+        }
         rotate(deg, pivot) {
+            // Contrapeso detrás del pivote.
+            val cw = Offset(pivot.x, pivot.y - w * 0.045f)
+            drawLine(metal, pivot, cw, strokeWidth = tube * 0.8f, cap = StrokeCap.Round)
+            drawRoundRect(Color(0xFF26221F), Offset(cw.x - w * 0.034f, cw.y - w * 0.03f), Size(w * 0.068f, w * 0.032f), CornerRadius(6f, 6f))
+            drawRoundRect(metal, Offset(cw.x - w * 0.034f, cw.y - w * 0.03f), Size(w * 0.068f, w * 0.008f), CornerRadius(4f, 4f))
             drawCircle(Color(0xFF1F1C1A), w * 0.075f, pivot)
             drawCircle(metal, w * 0.05f, pivot)
             drawCircle(Color(0xFF5E564C), w * 0.018f, pivot)
@@ -655,6 +733,8 @@ fun Tonearm(deg: Float, modifier: Modifier) {
                 drawRoundRect(metal, top, Size(hw, hl), CornerRadius(5f, 5f))
                 drawRect(Color(0xFF2A2522), Offset(top.x, top.y + hl * 0.72f), Size(hw, hl * 0.09f))
                 drawRect(C.Rojo, Offset(top.x, top.y + hl * 0.81f), Size(hw, hl * 0.07f))
+                // Uñeta para levantar el brazo con el dedo.
+                drawLine(metal, Offset(top.x + hw, top.y + hl * 0.35f), Offset(top.x + hw + w * 0.035f, top.y + hl * 0.28f), strokeWidth = w * 0.007f, cap = StrokeCap.Round)
                 drawLine(Color(0xFF8F8372), Offset(b.x, top.y + hl), Offset(b.x, top.y + hl + w * 0.012f), strokeWidth = 2f)
             }
         }

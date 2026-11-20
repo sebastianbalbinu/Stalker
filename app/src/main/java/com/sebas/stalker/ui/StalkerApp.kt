@@ -123,6 +123,11 @@ fun StalkerApp(
     Box(Modifier.fillMaxSize().background(C.Marfil)) {
         Crossfade(targetState = if (tab == 1) detail ?: tab else tab, label = "pantalla") { s ->
             when (s) {
+                is Detail.OfArtist -> ArtistScreen(
+                    s.name, vm,
+                    onBack = { if (stack.isNotEmpty()) stack.removeAt(stack.size - 1) },
+                    onOpen = { stack.add(it) }
+                )
                 is Detail.PickSongs -> PickSongsScreen(s.discoId, onDone = { if (stack.isNotEmpty()) stack.removeAt(stack.size - 1) })
                 is Detail -> CollectionScreen(
                     s, vm,
@@ -293,7 +298,8 @@ fun CurtainSheet(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 fun rememberArt(track: Track?): ImageBitmap? {
     val ctx = LocalContext.current
-    val art by produceState(initialValue = track?.let { ArtCache.peek(it.albumId) }, track?.albumId) {
+    val coverChanges by com.sebas.stalker.Covers.changes.collectAsState()
+    val art by produceState(initialValue = track?.let { ArtCache.peek(it.albumId) }, track?.albumId, coverChanges) {
         value = if (track == null) null else ArtCache.load(ctx, track)
     }
     return art

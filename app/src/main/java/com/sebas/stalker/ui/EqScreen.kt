@@ -111,6 +111,8 @@ fun EqScreen() {
                 }
             }
         }
+        Spacer(Modifier.height(26.dp))
+        HeadphoneSection(blocked)
       }
     }
 }
