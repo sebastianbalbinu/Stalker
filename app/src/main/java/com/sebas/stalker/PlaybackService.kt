@@ -91,6 +91,8 @@ class PlaybackService : MediaSessionService() {
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // Entró el disco que dejamos esperando al final de la cola.
+                enterNextDiscIfNeeded(reason)
                 // "Al terminar el disco": si volvió sola a la primera pista, se apaga.
                 if (Engine.sleepEndOfDisco.value && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
                     player.currentMediaItemIndex == 0
@@ -107,6 +109,8 @@ class PlaybackService : MediaSessionService() {
                     Engine.flipPending.value = true
                 }
                 if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) Engine.flipPending.value = false
+                // Suena la última canción: el siguiente disco queda listo detrás, sin cortes ni esperas.
+                queueNextDiscIfNeeded()
                 countedFor = null
                 resumeLongFile(reason)
                 reapply()
@@ -240,6 +244,49 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    /** El disco que quedó esperando detrás de la última canción: su primera pista y su nombre. */
+    private var waitingFirstId: String? = null
+    private var waitingTitle: String? = null
+    private var discChange = 0
+
+    private fun queueNextDiscIfNeeded() {
+        val n = player.mediaItemCount
+        if (n == 0 || player.currentMediaItemIndex != n - 1) return
+        if (!Engine.continuous.value || Engine.sleepEndOfDisco.value || player.repeatMode != Player.REPEAT_MODE_OFF) return
+        val (tracks, title) = upcomingDisc() ?: return
+        waitingFirstId = tracks.first().id.toString()
+        waitingTitle = title
+        player.addMediaItems(tracks.map { Engine.mediaItem(it) })
+    }
+
+    private fun enterNextDiscIfNeeded(reason: Int) {
+        val first = waitingFirstId ?: return
+        val idx = player.currentMediaItemIndex
+        if (idx <= 0 || player.currentMediaItem?.mediaId != first) {
+            // Si la cola se reemplazó (otro disco, la Rocola…), el disco en espera ya no aplica.
+            if ((1 until player.mediaItemCount).none { player.getMediaItemAt(it).mediaId == first }) {
+                waitingFirstId = null; waitingTitle = null
+            }
+            return
+        }
+        waitingFirstId = null
+        val title = waitingTitle
+        waitingTitle = null
+        // El disco anterior vuelve a la estantería: la cola queda solo con el nuevo.
+        player.removeMediaItems(0, idx)
+        Engine.setQueueTitle(title)
+        Engine.flipPending.value = false
+        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && !Engine.sleepEndOfDisco.value) {
+            // Lo que tarda cambiar un vinilo.
+            val token = ++discChange
+            player.pause()
+            scope.launch {
+                delay(NEXT_DISC_PAUSE_MS)
+                if (token == discChange && !player.isPlaying) player.play()
+            }
+        }
+    }
+
     /** "Siguiente" en la última canción (pantalla, notificación o audífonos): pasa al siguiente disco. */
     private fun skipToNextDisc(): Boolean {
         if (player.hasNextMediaItem() || player.repeatMode != Player.REPEAT_MODE_OFF) return false
@@ -257,6 +304,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun loadDisc(tracks: List<Track>, title: String) {
+        waitingFirstId = null; waitingTitle = null
         Engine.setQueueTitle(title)
         player.shuffleModeEnabled = false
         player.setMediaItems(tracks.map { Engine.mediaItem(it) }, 0, 0L)

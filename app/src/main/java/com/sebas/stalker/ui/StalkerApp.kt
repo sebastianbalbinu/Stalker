@@ -43,6 +43,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -82,6 +84,8 @@ fun StalkerApp(
 ) {
     var tab by rememberSaveable { mutableIntStateOf(1) }
     val stack = remember { mutableStateListOf<Detail>() }
+    // La biblioteca recuerda pestaña, búsqueda y posición aunque abras un disco o cambies de pantalla.
+    val libraryUi = remember { LibraryUi() }
     val current by vm.current.collectAsState()
     val playing by vm.isPlaying.collectAsState()
     val detail = stack.lastOrNull()
@@ -124,7 +128,7 @@ fun StalkerApp(
                     onOpen = { stack.add(it) }
                 )
                 0 -> PlayerScreen(vm, onClose = { tab = 1 })
-                1 -> LibraryScreen(vm, hasPermission, onRequestPermission, onOpen = { stack.add(it) }, onImportDisc = onImportDisc)
+                1 -> LibraryScreen(vm, hasPermission, onRequestPermission, onOpen = { stack.add(it) }, onImportDisc = onImportDisc, ui = libraryUi)
                 2 -> EqScreen()
                 4 -> StoreScreen(browser, if (current != null) 180.dp else 96.dp, onExit = { tab = 3 })
                 else -> SystemScreen(vm, onExport, onImport, onOpenStore = { tab = 4 })
@@ -142,7 +146,10 @@ fun StalkerApp(
         val update by Updates.available.collectAsState()
         val dismissed by Updates.dismissed.collectAsState()
         update?.let { u ->
-            if (!dismissed) UpdateSheet(u) { Updates.dismissed.value = true }
+            // Si ya puede actualizarse sola, no hace falta molestar: se instala en segundo plano.
+            val fg by Updates.foreground.collectAsState()
+            val silent = remember(fg, u) { Updates.silentPossible(ctx) }
+            if (!dismissed && !silent && Updates.autoEnabled(ctx)) UpdateSheet(u) { Updates.dismissed.value = true }
         }
 
         if (detail !is Detail.PickSongs || tab != 1) {
@@ -193,13 +200,14 @@ fun ScreenHeader(
     title: String,
     leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
+    sidePadding: Dp = 60.dp,
 ) {
     Box(Modifier.fillMaxWidth().height(48.dp)) {
         if (leading != null) Box(Modifier.align(Alignment.CenterStart)) { leading() }
         Text(
             title,
             style = Titulo.copy(fontSize = 26.sp, textAlign = TextAlign.Center),
-            modifier = Modifier.align(Alignment.Center).padding(horizontal = 60.dp),
+            modifier = Modifier.align(Alignment.Center).padding(horizontal = sidePadding),
             maxLines = 1
         )
         if (trailing != null) Box(Modifier.align(Alignment.CenterEnd)) { trailing() }
@@ -409,6 +417,11 @@ fun fmtTime(ms: Long): String {
 @Composable
 fun UpdateSheet(u: UpdateInfo, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val fg by Updates.foreground.collectAsState()
+    val status by Updates.status.collectAsState()
+    val installing by Updates.installing.collectAsState()
+    val allowed = remember(fg) { Updates.canInstall(ctx) }
     StalkerSheet(onDismiss) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Image(painterResource(R.drawable.logo), null, Modifier.size(72.dp).clip(RoundedCornerShape(18.dp)))
@@ -417,19 +430,26 @@ fun UpdateSheet(u: UpdateInfo, onDismiss: () -> Unit) {
             Text("STALKER ${u.version}", style = Secundario)
             Spacer(Modifier.height(10.dp))
             Text(
-                tr("Se instala encima de la que tienes, sin perder tus discos ni tus favoritos."),
+                if (allowed) tr("Se instala encima de la que tienes, sin perder tus discos ni tus favoritos. Desde esta vez, Stalker se actualizará sola.")
+                else tr("Permite que Stalker instale sus propias actualizaciones y no tendrás que descargarlas nunca más."),
                 style = Cuerpo.copy(color = C.Tierra, textAlign = TextAlign.Center)
             )
+            if (status.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(status, style = Secundario.copy(fontSize = 12.sp, textAlign = TextAlign.Center))
+            }
             Spacer(Modifier.height(18.dp))
-            Pill("Descargar ahora", selected = true, modifier = Modifier.fillMaxWidth()) {
-                try {
-                    ctx.startActivity(
-                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u.url))
-                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
-                } catch (e: Exception) {
+            if (!allowed) {
+                Pill("Permitir actualizaciones", selected = true, modifier = Modifier.fillMaxWidth()) {
+                    Updates.openInstallPermission(ctx)
                 }
-                onDismiss()
+            } else {
+                Pill(if (installing) "Instalando…" else "Actualizar ahora", selected = true, modifier = Modifier.fillMaxWidth()) {
+                    if (!installing) scope.launch {
+                        if (Updates.ready.value == null) Updates.download(ctx, u)
+                        Updates.install(ctx)
+                    }
+                }
             }
             Spacer(Modifier.height(8.dp))
             Pill("Más tarde", selected = false, modifier = Modifier.fillMaxWidth(), onClick = onDismiss)

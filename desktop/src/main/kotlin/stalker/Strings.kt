@@ -2,7 +2,7 @@ package stalker
 
 /** Textos en inglés: la clave es el texto original en español (ver I18n.kt). */
 internal val EN: Map<String, String> by lazy {
-    HashMap<String, String>(512).apply {
+    HashMap<String, String>(640).apply {
         put("Alguien", "Someone")
         put("Abriste la Jam %s. Comparte el código para que entren.", "You opened Jam %s. Share the code so others can join.")
         put("Entrando a la Jam %s…", "Joining Jam %s…")
@@ -395,5 +395,38 @@ internal val EN: Map<String, String> by lazy {
         put("El audio llega al DAC sin tocar. El volumen lo maneja el audífono y el ecualizador se apaga.", "Audio reaches the DAC untouched. Volume is handled by the headphones and the equalizer turns off.")
         put("El DAC cambia a la frecuencia de cada canción, sin remuestreo. Permite ecualizador.", "The DAC switches to each song's sample rate, with no resampling. Equalizer allowed.")
         put("Pasa por el mezclador de Android. Máxima compatibilidad.", "Goes through the Android mixer. Maximum compatibility.")
+        put("Descargando la versión %s…", "Downloading version %s…")
+        put("Versión %s lista · se instala sola", "Version %s ready · installs by itself")
+        put("No se pudo descargar la actualización", "Couldn't download the update")
+        put("Instalando la actualización…", "Installing the update…")
+        put("No se pudo instalar la actualización", "Couldn't install the update")
+        put("Se instala encima de la que tienes, sin perder tus discos ni tus favoritos. Desde esta vez, Stalker se actualizará sola.", "It installs over the one you have, without losing your records or favorites. From now on, Stalker will update itself.")
+        put("Permite que Stalker instale sus propias actualizaciones y no tendrás que descargarlas nunca más.", "Let Stalker install its own updates and you'll never have to download them again.")
+        put("Permitir actualizaciones", "Allow updates")
+        put("Actualizar ahora", "Update now")
+        put("Instalando…", "Installing…")
+        put("Actualizaciones automáticas", "Automatic updates")
+        put("Las versiones nuevas se descargan e instalan solas cuando no estás escuchando", "New versions download and install by themselves when you're not listening")
+        put("Analizando…", "Analyzing…")
+        put("Hi-Res · %s bit / %s kHz", "Hi-Res · %s bit / %s kHz")
+        put("Calidad CD · sin pérdida", "CD quality · lossless")
+        put("Con pérdida (%s)", "Lossy (%s)")
+        put("Sin año", "No year")
+        put("Ordenar estantería", "Sort shelf")
+        put("DISCOS POR REPISA", "RECORDS PER SHELF")
+        put("También puedes pellizcar la estantería con dos dedos.", "You can also pinch the shelf with two fingers.")
+        put("FAVORITOS", "FAVORITES")
+        put("Artista", "Artist")
+        put("Año", "Year")
+        put("Calidad", "Quality")
+        put("Recientes", "Recently added")
+        put("Más escuchados", "Most played")
+        put("Más antiguos primero", "Oldest first")
+        put("Mejor calidad primero", "Best quality first")
+        put("Más nuevos primero", "Newest first")
+        put("Más escuchados primero", "Most played first")
+        put("Menor calidad primero", "Lowest quality first")
+        put("Menos escuchados primero", "Least played first")
+        put("Sin pérdida. Sin prisa.", "Lossless. Unhurried.")
     }
 }

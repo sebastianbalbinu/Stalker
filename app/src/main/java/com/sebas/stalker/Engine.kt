@@ -33,6 +33,14 @@ data class Album(
     val tracks: List<Track>,
 )
 
+/** Calidad de un álbum: bits, frecuencia y códec de su primera pista. */
+data class AlbumQuality(val bits: Int, val rate: Int, val codec: String) {
+    val lossless get() = codec == "FLAC" || codec == "ALAC" || codec == "WAV"
+    val hiRes get() = lossless && (bits > 16 || rate > 48000)
+    /** Mayor es mejor: sin pérdida antes que con pérdida, luego bits y frecuencia. */
+    val score: Long get() = (if (lossless) 1_000_000_000L else 0L) + bits * 1_000_000L + rate
+}
+
 /** Disco armado por el usuario. */
 data class Disco(
     val id: Long,
@@ -106,6 +114,14 @@ object Engine {
 
     /** "Discos" (fundas con vinilo) o "Portadas". */
     val libraryView = MutableStateFlow("Discos")
+    /** Discos por fila en la estantería (2 a 5). */
+    val libraryColumns = MutableStateFlow(3)
+    /** Orden de la estantería: "Álbum", "Artista", "Año", "Calidad", "Recientes" o "Más escuchados". */
+    val librarySort = MutableStateFlow("Álbum")
+    /** Invierte el orden natural del criterio elegido. */
+    val sortReversed = MutableStateFlow(false)
+    /** Calidad de cada álbum (de su primera pista), leída una vez del archivo y guardada. */
+    val albumQuality = MutableStateFlow<Map<Long, AlbumQuality>>(emptyMap())
     /** Incluir la música recibida por WhatsApp y Telegram (nunca las notas de voz). */
     val includeShared = MutableStateFlow(true)
     /** Modo purista: al terminar el Lado A, el disco se detiene para darle vuelta. */
@@ -167,6 +183,10 @@ object Engine {
         includeShared.value = p.getBoolean("includeShared", true)
         purist.value = p.getBoolean("purist", false)
         continuous.value = p.getBoolean("continuous", true)
+        libraryColumns.value = p.getInt("libraryColumns", 3).coerceIn(2, 5)
+        librarySort.value = p.getString("librarySort", "Álbum") ?: "Álbum"
+        sortReversed.value = p.getBoolean("sortReversed", false)
+        albumQuality.value = readQuality(p.getString("albumQuality", "{}"))
         nextOrder.value = p.getString("nextOrder", "Estantería") ?: "Estantería"
         lastStoreUrl.value = p.getString("storeUrl", null)
     }
@@ -201,6 +221,43 @@ object Engine {
     fun setPurist(on: Boolean) {
         purist.value = on
         prefs?.edit()?.putBoolean("purist", on)?.apply()
+    }
+
+    fun setLibraryColumns(n: Int) {
+        val v = n.coerceIn(2, 5)
+        libraryColumns.value = v
+        prefs?.edit()?.putInt("libraryColumns", v)?.apply()
+    }
+
+    fun setLibrarySort(v: String) {
+        librarySort.value = v
+        prefs?.edit()?.putString("librarySort", v)?.apply()
+    }
+
+    fun setSortReversed(on: Boolean) {
+        sortReversed.value = on
+        prefs?.edit()?.putBoolean("sortReversed", on)?.apply()
+    }
+
+    @Synchronized
+    fun putQuality(found: Map<Long, AlbumQuality>) {
+        if (found.isEmpty()) return
+        val m = albumQuality.value + found
+        albumQuality.value = m
+        val o = JSONObject()
+        m.forEach { (k, q) -> o.put(k.toString(), "${q.bits},${q.rate},${q.codec}") }
+        prefs?.edit()?.putString("albumQuality", o.toString())?.apply()
+    }
+
+    private fun readQuality(s: String?): Map<Long, AlbumQuality> = try {
+        val o = JSONObject(s ?: "{}")
+        o.keys().asSequence().mapNotNull { k ->
+            val parts = o.getString(k).split(',')
+            val id = k.toLongOrNull() ?: return@mapNotNull null
+            if (parts.size < 3) null else id to AlbumQuality(parts[0].toInt(), parts[1].toInt(), parts[2])
+        }.toMap()
+    } catch (e: Exception) {
+        emptyMap()
     }
 
     fun setContinuous(on: Boolean) {
