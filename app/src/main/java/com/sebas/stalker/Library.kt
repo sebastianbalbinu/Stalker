@@ -11,6 +11,8 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.util.LruCache
+import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.withPermit
 import android.util.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -257,32 +259,55 @@ object Library {
 }
 
 object ArtCache {
-    private val cache = LruCache<Long, ImageBitmap>(80)
+    /** Caché por memoria (no por cantidad): un octavo de lo que Android le da a la app. */
+    private val cache = object : LruCache<Long, ImageBitmap>((Runtime.getRuntime().maxMemory() / 8).toInt().coerceAtLeast(8 shl 20)) {
+        override fun sizeOf(key: Long, value: ImageBitmap): Int = value.width * value.height * 4
+    }
     private val missing = HashSet<Long>()
+    /** Carátulas que se están leyendo ahora: si varias portadas piden la misma, se lee una sola vez. */
+    private val inFlight = HashMap<Long, kotlinx.coroutines.Deferred<ImageBitmap?>>()
+    /** Como máximo 3 lecturas a la vez: al deslizar rápido no se ahoga el teléfono. */
+    private val gate = kotlinx.coroutines.sync.Semaphore(3)
 
     fun peek(albumId: Long): ImageBitmap? = cache.get(albumId)
 
-    suspend fun load(context: Context, track: Track): ImageBitmap? = withContext(Dispatchers.IO) {
-        cache.get(track.albumId)?.let { return@withContext it }
-        synchronized(missing) { if (track.albumId in missing) return@withContext null }
+    suspend fun load(context: Context, track: Track): ImageBitmap? {
+        cache.get(track.albumId)?.let { return it }
+        val job = synchronized(inFlight) {
+            inFlight.getOrPut(track.albumId) {
+                kotlinx.coroutines.CoroutineScope(Dispatchers.IO).async {
+                    try { gate.withPermit { read(context, track) } } finally { synchronized(inFlight) { inFlight.remove(track.albumId) } }
+                }
+            }
+        }
+        return job.await()
+    }
+
+    private fun read(context: Context, track: Track): ImageBitmap? {
+        cache.get(track.albumId)?.let { return it }
+        synchronized(missing) { if (track.albumId in missing) return null }
         var bmp: Bitmap? = null
         if (Build.VERSION.SDK_INT >= 29) {
             bmp = try {
-                context.contentResolver.loadThumbnail(track.uri, Size(640, 640), null)
+                context.contentResolver.loadThumbnail(track.uri, Size(ART_PX, ART_PX), null)
             } catch (e: Exception) {
                 null
             }
         }
         if (bmp == null) bmp = embedded(context, track.uri)
-        if (bmp == null) {
+        return if (bmp == null) {
             synchronized(missing) { missing.add(track.albumId) }
             null
         } else {
             val img = bmp.asImageBitmap()
+            img.prepareToDraw()
             cache.put(track.albumId, img)
             img
         }
     }
+
+    /** Tamaño de las carátulas en memoria: nítido en pantalla completa sin gastar de más. */
+    private const val ART_PX = 560
 
     private fun embedded(context: Context, uri: Uri): Bitmap? {
         val r = MediaMetadataRetriever()
@@ -292,7 +317,7 @@ object ArtCache {
             val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(data, 0, data.size, opts)
             var sample = 1
-            while (opts.outWidth / (sample * 2) >= 640) sample *= 2
+            while (opts.outWidth / (sample * 2) >= ART_PX) sample *= 2
             BitmapFactory.decodeByteArray(data, 0, data.size, BitmapFactory.Options().apply { inSampleSize = sample })
         } catch (e: Exception) {
             null

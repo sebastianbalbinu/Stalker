@@ -35,7 +35,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 optimiza el código (Compose corre bastante más fluido) y quita lo que no se usa.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("stalker")
         }
         debug {
@@ -72,6 +75,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.5")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.5")
     implementation("androidx.core:core-ktx:1.13.1")
+    // Precompila las partes más usadas de la interfaz al instalar: menos tirones los primeros minutos.
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
     implementation("com.google.guava:guava:33.3.0-android")
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

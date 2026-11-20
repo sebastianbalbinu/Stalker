@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -153,6 +154,11 @@ private fun woodBack(): ImageBitmap = ImageBitmap.imageResource(R.drawable.mader
 @Composable
 private fun woodPlank(): ImageBitmap = ImageBitmap.imageResource(R.drawable.madera_repisa)
 
+/** Pinceles de madera creados una sola vez (no en cada cuadro al deslizar). */
+@Composable
+private fun rememberWood(img: ImageBitmap): ShaderBrush =
+    remember(img) { ShaderBrush(ImageShader(img, TileMode.Repeated, TileMode.Repeated)) }
+
 private const val PLANK_TOP = 4   // cara de arriba de la tabla (dp)
 private const val PLANK_FRONT = 11 // canto frontal (dp)
 private const val PLANK_SHADOW = 14 // sombra sobre el fondo (dp)
@@ -165,15 +171,15 @@ val PlankHeight = (PLANK_TOP + PLANK_FRONT + PLANK_SHADOW).dp
  */
 @Composable
 fun WoodCabinet(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
-    val back = woodBack()
-    val plank = woodPlank()
+    val back = rememberWood(woodBack())
+    val woodH = rememberWood(woodPlank())
     val stile = 9.dp
     Box(
         modifier
             .fullBleed(22.dp)
             .drawBehind {
                 // Fondo del mueble (la veta es vertical: al deslizar no se nota el corte).
-                drawRect(ShaderBrush(ImageShader(back, TileMode.Repeated, TileMode.Repeated)))
+                drawRect(back)
                 drawRect(Color.Black.copy(alpha = 0.18f))
                 // Luz cálida que cae desde arriba y rincones en penumbra.
                 drawRect(
@@ -192,11 +198,10 @@ fun WoodCabinet(modifier: Modifier = Modifier, content: @Composable BoxScope.() 
             .drawWithContent {
                 drawContent()
                 val sw = stile.toPx()
-                val woodH = ShaderBrush(ImageShader(plank, TileMode.Repeated, TileMode.Repeated))
                 // Laterales del mueble con su canto iluminado.
                 for (left in listOf(true, false)) {
                     val x = if (left) 0f else size.width - sw
-                    drawRect(ShaderBrush(ImageShader(back, TileMode.Repeated, TileMode.Repeated)), Offset(x, 0f), Size(sw, size.height))
+                    drawRect(back, Offset(x, 0f), Size(sw, size.height))
                     drawRect(Color.White.copy(alpha = 0.06f), Offset(x, 0f), Size(sw, size.height))
                     val edge = if (left) x + sw - 1.dp.toPx() else x
                     drawRect(Color(0x55E9C9A0), Offset(edge, 0f), Size(1.dp.toPx(), size.height))
@@ -238,11 +243,10 @@ private fun Modifier.fullBleed(side: Dp): Modifier = layout { m, c ->
 /** La repisa: tabla de nogal con cara de arriba iluminada, canto frontal y sombra sobre el fondo. */
 @Composable
 fun Plank(modifier: Modifier = Modifier) {
-    val plank = woodPlank()
+    val wood = rememberWood(woodPlank())
     Canvas(modifier.fillMaxWidth().height(PlankHeight)) {
         val top = PLANK_TOP.dp.toPx()
         val front = PLANK_FRONT.dp.toPx()
-        val wood = ShaderBrush(ImageShader(plank, TileMode.Repeated, TileMode.Repeated))
         // Cara de arriba, donde se apoyan los discos.
         drawRect(wood, Offset.Zero, Size(size.width, top))
         drawRect(Color.White.copy(alpha = 0.16f), Offset.Zero, Size(size.width, top))

@@ -103,7 +103,9 @@ fun StalkerApp(
     // Reloj de giro compartido por todas las miniaturas de vinilo.
     val spinSlow = remember { mutableFloatStateOf(0f) }
     val spinFast = remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(Unit) {
+    // Solo gira mientras suena música: en pausa no se redibuja nada cada cuadro (menos batería, más fluidez).
+    LaunchedEffect(playing) {
+        if (!playing) return@LaunchedEffect
         var last = 0L
         while (true) {
             withFrameNanos { now ->

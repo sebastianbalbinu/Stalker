@@ -7,6 +7,6 @@
     </style>
     <color name="marfil">#F5EFE5</color>
     <!-- Fondo oscuro mientras abre la app: nada de pantallazo crema de noche -->
-    <color name="sala">#0D0A09</color>
+    <color name="sala">#000000</color>
     <string name="app_name">Stalker</string>
 </resources>
