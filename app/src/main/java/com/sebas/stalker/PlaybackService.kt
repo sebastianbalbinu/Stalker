@@ -187,6 +187,10 @@ class PlaybackService : MediaSessionService() {
             combine(Engine.outputMode, Engine.eqEnabled, Engine.eqPreset, Engine.replayGain) { _, _, _, _ -> }
                 .collect { reapply() }
         }
+        AutoEq.init(this)
+        scope.launch {
+            combine(AutoEq.enabled, AutoEq.curve) { _, _ -> }.collect { applyAutoEq() }
+        }
 
         // Reloj de 1 segundo: estadísticas, temporizador y archivos largos.
         scope.launch {
@@ -385,7 +389,24 @@ class PlaybackService : MediaSessionService() {
         player.volume = (gainFactor * fadeFactor).coerceIn(0f, 1f)
     }
 
+    private var headphoneEq: android.media.audiofx.DynamicsProcessing? = null
+
+    /** Corrección de audífonos (AutoEq): encima del ecualizador, nunca en Bit-perfect. */
+    private fun applyAutoEq() {
+        val want = AutoEq.enabled.value && !bitPerfectActive()
+        try {
+            if (!want) {
+                headphoneEq?.enabled = false
+                return
+            }
+            val dp = headphoneEq
+            if (dp == null) headphoneEq = AutoEq.build(player.audioSessionId) else AutoEq.apply(dp)
+        } catch (e: Exception) {
+        }
+    }
+
     private fun applyEq() {
+        applyAutoEq()
         val want = Engine.eqEnabled.value && !bitPerfectActive()
         try {
             if (equalizer == null && want) {
@@ -465,6 +486,7 @@ class PlaybackService : MediaSessionService() {
         }
         output.clear()
         equalizer?.release()
+        headphoneEq?.release()
         session?.run {
             player.release()
             release()

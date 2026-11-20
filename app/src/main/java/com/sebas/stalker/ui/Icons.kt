@@ -61,6 +61,7 @@ object Ico {
     )
     val Gear = build("gear", circle(12f, 12f, 3f) + " M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" to true)
     val Headphones = build("headphones", "M4 15v-3a8 8 0 0 1 16 0v3 M3 14h4v6H3z M17 14h4v6h-4z" to true)
+    val Info = build("info", "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18 M12 11v6 M12 7.5v0.5" to true)
     val Wave = build("wave", "M3 12h1M7 9v6M10 6v12M13 8v8M16 10v4M19 12h2" to true)
     val Refresh = build("refresh", "M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5" to true)
     val Plus = build("plus", "M12 5v14M5 12h14" to true)

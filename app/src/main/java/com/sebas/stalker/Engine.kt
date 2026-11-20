@@ -23,6 +23,10 @@ data class Track(
     val sizeBytes: Long = 0L,
     /** "WhatsApp" o "Telegram" si llegó compartida por un chat. */
     val source: String? = null,
+    /** Número de disco en álbumes dobles (1 si es uno solo). */
+    val discNo: Int = 1,
+    /** Artista del álbum (etiqueta ALBUMARTIST), útil en recopilatorios. */
+    val albumArtist: String? = null,
 )
 
 data class Album(
@@ -160,6 +164,7 @@ object Engine {
     fun init(context: Context) {
         I18n.init(context)
         if (prefs != null) return
+        AutoEq.init(context)
         val p = context.applicationContext.getSharedPreferences("stalker", Context.MODE_PRIVATE)
         prefs = p
         outputMode.value = runCatching { OutputMode.valueOf(p.getString("mode", OutputMode.BIT_PERFECT.name)!!) }
@@ -654,8 +659,10 @@ object Engine {
     fun albums(list: List<Track>): List<Album> =
         list.groupBy { it.albumId }
             .map { (id, ts) ->
-                val sorted = ts.sortedWith(compareBy<Track> { it.trackNo }.thenBy { it.title.lowercase() })
-                val artist = sorted.groupingBy { it.artist }.eachCount().maxByOrNull { it.value }?.key ?: ""
+                val sorted = ts.sortedWith(compareBy<Track> { it.discNo }.thenBy { it.trackNo }.thenBy { it.title.lowercase() })
+                // El artista del álbum manda (recopilatorios); si no hay, el que más aparece.
+                val artist = sorted.mapNotNull { it.albumArtist }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+                    ?: sorted.groupingBy { it.artist }.eachCount().maxByOrNull { it.value }?.key ?: ""
                 Album(id, sorted.first().album, artist, sorted.maxOf { it.year }, sorted)
             }
             .sortedBy { it.title.lowercase() }

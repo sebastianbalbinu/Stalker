@@ -313,6 +313,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Busca las portadas que faltan en toda la biblioteca. */
+    fun fetchAllCovers() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            Covers.fetchAll(getApplication(), Engine.albums(Engine.visible(Engine.tracks.value, Engine.hiddenAlbums.value, Engine.hiddenTracks.value)))
+        }
+    }
+
     fun checkUpdatesQuiet() {
         viewModelScope.launch { Updates.check(getApplication()) }
     }
