@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Stalker" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/sala</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Pantalla de arranque de Android 12+: oscura, con el ícono de Stalker -->
+        <item name="android:windowSplashScreenBackground">@color/sala</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/sala</item>
+    </style>
+</resources>

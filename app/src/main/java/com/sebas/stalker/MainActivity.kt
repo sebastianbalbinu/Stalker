@@ -20,6 +20,10 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.fillMaxSize
+import kotlinx.coroutines.flow.first
+import com.sebas.stalker.ui.IntroScreen
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import com.sebas.stalker.ui.C
@@ -142,14 +146,22 @@ class MainActivity : ComponentActivity() {
                 "Claro" -> false
                 else -> system
             }
-            LaunchedEffect(dark) {
+            // Pantalla de carga oscura: se queda al menos un instante y se va cuando la biblioteca está lista.
+            var intro by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(true) }
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(1100)
+                kotlinx.coroutines.withTimeoutOrNull(2400) { Engine.scanned.first { it } }
+                intro = false
+            }
+            LaunchedEffect(dark, intro) {
                 C.dark = dark
-                val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT)
+                val style = if (dark || intro) SystemBarStyle.dark(Color.TRANSPARENT)
                 else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
             }
             // Al cambiar de idioma se redibuja toda la interfaz.
             val language by I18n.choice.collectAsState()
+            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
             androidx.compose.runtime.key(language) {
             StalkerApp(
                 vm = vm,
@@ -162,6 +174,12 @@ class MainActivity : ComponentActivity() {
                 onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                 onImportDisc = { discLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
             )
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = intro,
+                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(0)),
+                exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(550)),
+            ) { IntroScreen(null) }
             }
         }
     }

@@ -427,5 +427,6 @@ internal val EN: Map<String, String> by lazy {
         put("Más escuchados primero", "Most played first")
         put("Menor calidad primero", "Lowest quality first")
         put("Menos escuchados primero", "Least played first")
+        put("Sin pérdida. Sin prisa.", "Lossless. Unhurried.")
     }
 }
