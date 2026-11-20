@@ -68,13 +68,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         viewModelScope.launch { Updates.check(app) }
+        Updates.schedule(app)
         // Actualización automática: cuando la app queda en segundo plano y no suena nada, se instala sola.
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(Updates.ready, Updates.foreground, isPlaying) { r, fg, pl -> Triple(r, fg, pl) }
                 .collectLatest { (r, fg, pl) ->
                     if (r == null || fg || pl || !Updates.autoEnabled(app) || !Updates.silentPossible(app)) return@collectLatest
                     delay(5000)
-                    Updates.install(app)
+                    if (!Updates.musicActive(app)) Updates.install(app)
                 }
         }
         try {

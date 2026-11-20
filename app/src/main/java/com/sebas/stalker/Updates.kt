@@ -93,7 +93,8 @@ object Updates {
         restoreReady(ctx)
         val prefs = prefs(ctx)
         val last = prefs.getLong("updateCheck", 0L)
-        if (!force && System.currentTimeMillis() - last < 6 * 3_600_000L) return@withContext
+        // Al abrir la app se revisa si pasó más de media hora; el trabajo de fondo revisa cada pocas horas.
+        if (!force && System.currentTimeMillis() - last < 30 * 60_000L) return@withContext
         status.value = tr("Buscando…")
         if (force) dismissed.value = false
         try {
@@ -168,6 +169,51 @@ object Updates {
         }
     }
 
+    /** Está sonando música en el teléfono (de Stalker o de otra app): entonces no se interrumpe nada. */
+    fun musicActive(ctx: Context): Boolean = try {
+        (ctx.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).isMusicActive
+    } catch (e: Exception) {
+        false
+    }
+
+    /** Programa la revisión en segundo plano: cada 4 horas, con internet, aunque la app esté cerrada. */
+    fun schedule(ctx: Context) {
+        val req = androidx.work.PeriodicWorkRequestBuilder<UpdateWorker>(4, java.util.concurrent.TimeUnit.HOURS)
+            .setConstraints(
+                androidx.work.Constraints.Builder()
+                    .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build()
+            )
+            .setInitialDelay(20, java.util.concurrent.TimeUnit.MINUTES)
+            .build()
+        androidx.work.WorkManager.getInstance(ctx)
+            .enqueueUniquePeriodicWork("stalker-updates", androidx.work.ExistingPeriodicWorkPolicy.KEEP, req)
+    }
+
+    /** Aviso cuando la versión nueva está lista pero Android pide confirmar (la primera vez). */
+    fun notifyReady(ctx: Context, version: String) {
+        try {
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (Build.VERSION.SDK_INT >= 26) {
+                nm.createNotificationChannel(
+                    android.app.NotificationChannel("updates", tr("Actualizaciones"), android.app.NotificationManager.IMPORTANCE_DEFAULT)
+                )
+            }
+            val open = PendingIntent.getActivity(
+                ctx, 7, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val n = androidx.core.app.NotificationCompat.Builder(ctx, "updates")
+                .setSmallIcon(R.drawable.ic_notif_update)
+                .setContentTitle(tr("Stalker %s está lista", version))
+                .setContentText(tr("Toca para actualizar"))
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .build()
+            nm.notify(4242, n)
+        } catch (e: Exception) {
+        }
+    }
+
     /** Instala la APK descargada. Si Android necesita confirmación, muestra su ventana. */
     suspend fun install(ctx: Context): Boolean = withContext(Dispatchers.IO) {
         val f = ready.value ?: return@withContext false
@@ -226,4 +272,24 @@ object Updates {
 /** Recibe el resultado del instalador de Android. */
 class InstallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = Updates.onInstallResult(context, intent)
+}
+
+/**
+ * Revisión de fondo: busca la versión nueva, la descarga y, si se puede sin preguntar y no suena música,
+ * la instala. Si Android aún pide confirmar, deja un aviso para tocar.
+ */
+class UpdateWorker(ctx: Context, params: androidx.work.WorkerParameters) : androidx.work.CoroutineWorker(ctx, params) {
+    override suspend fun doWork(): Result {
+        val ctx = applicationContext
+        if (!Updates.autoEnabled(ctx)) return Result.success()
+        I18n.init(ctx)
+        Updates.check(ctx, force = true)
+        val info = Updates.available.value ?: return Result.success()
+        Updates.ready.value ?: Updates.download(ctx, info) ?: return Result.retry()
+        when {
+            Updates.silentPossible(ctx) && !Updates.musicActive(ctx) && !Updates.foreground.value -> Updates.install(ctx)
+            !Updates.silentPossible(ctx) && !Updates.foreground.value -> Updates.notifyReady(ctx, info.version)
+        }
+        return Result.success()
+    }
 }
