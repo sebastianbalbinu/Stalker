@@ -34,11 +34,11 @@ object Continuous {
             val again = rocola(albums, favorites, title == ROCOLA_FAVS)
             return if (again.isEmpty()) null else again to title
         }
-        val keys = queue.map { it.albumKey }.distinct()
-        if (keys.size != 1 || albums.isEmpty()) return null
-        val current = keys.first()
+        if (albums.isEmpty()) return null
+        // Cualquier lista: sigue el álbum que viene después del de la última canción. Nunca se detiene sola.
+        val current = queue.last().albumKey
         val shelf = albums.map { it.key }
-        if (shelf.size == 1 && shelf[0] == current) return null
+        if (shelf.size == 1) return albums[0].tracks to albums[0].title
 
         played.add(current)
         if (shelf.all { it in played }) { played.clear(); played.add(current) }
@@ -47,7 +47,7 @@ object Continuous {
         val ring = if (at < 0) shelf else shelf.drop(at + 1) + shelf.take(at)
         val fresh = ring.filter { it !in played }
         val byKey = albums.associateBy { it.key }
-        val artist = (byKey[current]?.artist ?: queue.first().artist).lowercase()
+        val artist = (byKey[current]?.artist ?: queue.last().artist).lowercase()
         val pick = when (Prefs.nextOrder) {
             "Al azar" -> fresh.randomOrNull()
             "Mismo artista" -> fresh.firstOrNull { byKey[it]?.artist?.lowercase() == artist } ?: fresh.firstOrNull()

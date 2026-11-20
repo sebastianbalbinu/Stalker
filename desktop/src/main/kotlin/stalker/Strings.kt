@@ -533,5 +533,8 @@ internal val EN: Map<String, String> by lazy {
         put("La canción se guardó en Música/Stalker/Recibidos", "The song was saved to Music/Stalker/Received")
         put("Guardada en tu biblioteca · Recibidos", "Saved to your library · Received")
         put("%s canciones guardadas en tu biblioteca", "%s songs saved to your library")
+        put("Cuando termina un disco o una lista, entra el siguiente disco sin cortes", "When a record or list ends, the next record starts with no gap")
+        put("Pausa entre discos", "Pause between records")
+        put("2 segundos de silencio, como al cambiar un vinilo", "2 seconds of silence, like changing a vinyl")
     }
 }
