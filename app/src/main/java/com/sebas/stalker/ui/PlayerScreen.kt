@@ -265,7 +265,7 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
     if (showTimer) TimerSheet { showTimer = false }
     if (showJam) JamSheet { showJam = false }
     if (showLyrics) {
-        LyricsSheet(tags, pos, track?.title, onSeek = { vm.seek(it) }, onDismiss = { showLyrics = false })
+        LyricsSheet(tags, pos, track, onSeek = { vm.seek(it) }, onDismiss = { showLyrics = false })
     }
 }
 
