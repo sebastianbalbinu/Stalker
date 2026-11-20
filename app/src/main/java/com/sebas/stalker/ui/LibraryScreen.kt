@@ -84,6 +84,7 @@ fun LibraryScreen(
     onRequestPermission: () -> Unit,
     onOpen: (Detail) -> Unit,
     onImportDisc: () -> Unit = {},
+    ui: LibraryUi = remember { LibraryUi() },
 ) {
     val all by Engine.tracks.collectAsState()
     val view by Engine.libraryView.collectAsState()
@@ -97,9 +98,17 @@ fun LibraryScreen(
     val lastPlayed by Engine.albumLastPlayed.collectAsState()
     val current by vm.current.collectAsState()
 
-    var tab by rememberSaveable { mutableStateOf("Álbumes") }
-    var searching by rememberSaveable { mutableStateOf(false) }
-    var query by rememberSaveable { mutableStateOf("") }
+    // Viven fuera de esta pantalla: al volver de un disco todo sigue donde estaba.
+    var tab by ui::tab
+    var searching by ui::searching
+    var query by ui::query
+    var sorting by remember { mutableStateOf(false) }
+    val columns by Engine.libraryColumns.collectAsState()
+    val sort by Engine.librarySort.collectAsState()
+    val reversed by Engine.sortReversed.collectAsState()
+    val quality by Engine.albumQuality.collectAsState()
+    val plays by Engine.playCounts.collectAsState()
+    val changeColumns = rememberColumnsChanger()
     var albumMenu by remember { mutableStateOf<Album?>(null) }
     var songMenu by remember { mutableStateOf<Track?>(null) }
     var addToDisco by remember { mutableStateOf<List<Long>?>(null) }
@@ -125,16 +134,25 @@ fun LibraryScreen(
         ScreenHeader(
             tr("Biblioteca"),
             leading = {
-                SoftButton(if (searching) Ico.Close else Ico.Search, if (searching) tr("Cerrar búsqueda") else tr("Buscar")) {
-                    searching = !searching
-                    if (!searching) query = ""
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SoftButton(if (searching) Ico.Close else Ico.Search, if (searching) tr("Cerrar búsqueda") else tr("Buscar")) {
+                        searching = !searching
+                        if (!searching) query = ""
+                    }
+                    SoftButton(Ico.Shuffle, if (tab == "Favoritos") tr("Favoritos al azar") else tr("Rocola · todo al azar")) {
+                        vm.rocola(onlyFavorites = tab == "Favoritos")
+                    }
                 }
             },
             trailing = {
-                SoftButton(if (discView) Ico.Library else Ico.Disc, if (discView) tr("Ver portadas") else tr("Ver como discos")) {
-                    Engine.setLibraryView(if (discView) "Portadas" else "Discos")
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SoftButton(Ico.Sort, tr("Ordenar estantería")) { sorting = true }
+                    SoftButton(if (discView) Ico.Library else Ico.Disc, if (discView) tr("Ver portadas") else tr("Ver como discos")) {
+                        Engine.setLibraryView(if (discView) "Portadas" else "Discos")
+                    }
                 }
             },
+            sidePadding = 104.dp,
         )
         if (searching) {
             Spacer(Modifier.height(14.dp))
@@ -190,49 +208,34 @@ fun LibraryScreen(
                             else tr("No hay álbumes que coincidan.")
                         )
                     } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                        val sections = remember(list, sort, reversed, quality, plays) {
+                            sortAlbums(list, sort, reversed, quality, plays)
+                        }
+                        val favAlbums = remember(albums, favs) { albums.filter { it.id in favs }.sortedBy { it.title.lowercase() } }
+                        val openAlbum: (Album) -> Unit = { onOpen(Detail.OfAlbum(it.id)) }
+                        val longAlbum: (Album) -> Unit = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); albumMenu = it }
+                        val nowAlbum = if (playing) currentAlbum else null
+                        LazyColumn(
+                            state = ui.list(if (tab == "Álbumes") "albums" else "favs"),
                             contentPadding = PaddingValues(bottom = bottom),
+                            modifier = Modifier.fillMaxSize().pinchToColumns(changeColumns),
                         ) {
-                            if (query.isBlank()) {
-                                item(span = { GridItemSpan(2) }, key = "rocola") {
-                                    val favTab = tab == "Favoritos"
-                                    RocolaButton(
-                                        if (favTab) tr("Favoritos al azar") else tr("Rocola · todo al azar"),
-                                        if (favTab) tr("Todas las canciones de tus álbumes favoritos, mezcladas")
-                                        else tr("Toda tu biblioteca mezclada, sin repetir"),
-                                    ) { vm.rocola(onlyFavorites = favTab) }
+                            if (tab == "Álbumes" && query.isBlank()) {
+                                if (favAlbums.isNotEmpty()) item(key = "favoritos") {
+                                    ShelfRow(tr("FAVORITOS"), favAlbums, discView, 124.dp, nowAlbum, openAlbum, longAlbum)
                                 }
-                            }
-                            if (tab == "Álbumes" && query.isBlank() && recent.isNotEmpty()) {
-                                item(span = { GridItemSpan(2) }, key = "recientes") {
-                                    RecentRow(recent, discView) { onOpen(Detail.OfAlbum(it.id)) }
+                                if (recent.isNotEmpty()) item(key = "recientes") {
+                                    ShelfRow(tr("VOLVER A ESCUCHAR"), recent, discView, 100.dp, nowAlbum, openAlbum, longAlbum)
                                 }
+                                item(key = "todos") { ShelfTitle(tr("TODOS LOS ÁLBUMES") + " · " + tr(sort).uppercase()) }
                             }
-                            items(list, key = { it.id }) { a ->
-                                if (discView) {
-                                    SleeveCard(
-                                        cover = a.tracks.first(), title = a.title, subtitle = a.artist,
-                                        onClick = { onOpen(Detail.OfAlbum(a.id)) },
-                                        onLong = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); albumMenu = a },
-                                        fast = playing && currentAlbum == a.id,
-                                        favorite = a.id in favs,
-                                    )
-                                } else {
-                                    AlbumCard(
-                                        a, favorite = a.id in favs,
-                                        onClick = { onOpen(Detail.OfAlbum(a.id)) },
-                                        onLong = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); albumMenu = a },
-                                    )
-                                }
-                            }
+                            shelfGrid(sections, columns, discView, { nowAlbum }, openAlbum, longAlbum)
                         }
                     }
                 }
 
                 tab == "Mis discos" -> LazyVerticalGrid(
+                    state = ui.grid("discos"),
                     columns = GridCells.Fixed(2),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -254,7 +257,7 @@ fun LibraryScreen(
                     }
                 }
 
-                tab == "Recibidos" -> LazyColumn(contentPadding = PaddingValues(bottom = bottom)) {
+                tab == "Recibidos" -> LazyColumn(state = ui.list("recibidos"), contentPadding = PaddingValues(bottom = bottom)) {
                     item {
                         Text(
                             tr("Canciones que te mandaron por WhatsApp o Telegram. Las notas de voz nunca aparecen aquí."),
@@ -270,7 +273,7 @@ fun LibraryScreen(
                     }
                 }
 
-                else -> LazyColumn(contentPadding = PaddingValues(bottom = bottom)) {
+                else -> LazyColumn(state = ui.list("canciones"), contentPadding = PaddingValues(bottom = bottom)) {
                     itemsIndexed(shownSongs, key = { _, t -> t.id }) { i, t ->
                         SongRow(
                             t, playing = current?.id == t.id, disc = discView,
@@ -310,6 +313,7 @@ fun LibraryScreen(
         )
     }
     addToDisco?.let { ids -> AddToDiscoSheet(ids) { addToDisco = null } }
+    if (sorting) SortSheet { sorting = false }
     if (naming) {
         NameDialog(tr("Nuevo disco"), "", tr("Crear"), onDismiss = { naming = false }) { name ->
             val d = Engine.createDisco(name)

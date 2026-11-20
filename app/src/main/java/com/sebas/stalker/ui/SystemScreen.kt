@@ -63,6 +63,7 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
     val night by Engine.nightMode.collectAsState()
     val rg by Engine.replayGain.collectAsState()
     val ctx = LocalContext.current
+    var autoUpdate by remember { mutableStateOf(com.sebas.stalker.Updates.autoEnabled(ctx)) }
     val version = remember {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "1.0"
     }
@@ -209,6 +210,12 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
                         Text(tr("%s álbumes · %s canciones", hAlbums.size, hTracks.size), style = Secundario.copy(fontSize = 12.sp))
                     }
                     Icon(Ico.Right, null, tint = C.Tierra, modifier = Modifier.size(16.dp))
+                }
+                HorizontalDivider(color = C.Arena, thickness = 1.dp)
+                ToggleRow(Ico.Download, tr("Actualizaciones automáticas"), tr("Las versiones nuevas se descargan e instalan solas cuando no estás escuchando"), autoUpdate) {
+                    autoUpdate = it
+                    com.sebas.stalker.Updates.setAuto(ctx, it)
+                    if (it) vm.checkUpdates()
                 }
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
                 Row(Modifier.fillMaxWidth().clickable { vm.checkUpdates() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {

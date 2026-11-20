@@ -112,8 +112,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        Updates.foreground.value = true
+        vm.checkUpdatesQuiet()
         // Al volver a la app, revisa si hay música nueva.
         if (Engine.scanned.value && granted()) vm.rescan()
+    }
+
+    override fun onStop() {
+        Updates.foreground.value = false
+        super.onStop()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

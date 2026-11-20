@@ -89,5 +89,6 @@ object Ico {
     val Bag = build("bag", "M5 8h14l-1.2 12H6.2z M9 8V6.5a3 3 0 0 1 6 0V8" to true)
     val Bluetooth = build("bt", "M7 7l10 10-5 4V3l5 4L7 17" to true)
     val Up = build("up", "M6 15l6-6 6 6" to true)
+    val Sort = build("sort", "M4 7h11M4 12h8M4 17h5M18 5v14M15 16l3 3 3-3" to true)
     val Layers = build("layers", "M12 3l9 5-9 5-9-5z M3 12l9 5 9-5M3 16l9 5 9-5" to true)
 }

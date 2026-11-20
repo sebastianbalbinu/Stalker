@@ -15,6 +15,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 
@@ -67,6 +68,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         viewModelScope.launch { Updates.check(app) }
+        // Actualización automática: cuando la app queda en segundo plano y no suena nada, se instala sola.
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(Updates.ready, Updates.foreground, isPlaying) { r, fg, pl -> Triple(r, fg, pl) }
+                .collectLatest { (r, fg, pl) ->
+                    if (r == null || fg || pl || !Updates.autoEnabled(app) || !Updates.silentPossible(app)) return@collectLatest
+                    delay(5000)
+                    Updates.install(app)
+                }
+        }
         try {
             app.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observer)
         } catch (e: Exception) {
@@ -97,6 +107,24 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             Engine.setTracks(Library.scan(getApplication()))
             controller?.let { sync(it) }
+            scanQuality()
+        }
+    }
+
+    /** Lee una vez la calidad real de cada álbum nuevo (encabezado del FLAC), para ordenar por calidad. */
+    private var qualityJob: Job? = null
+    private fun scanQuality() {
+        if (qualityJob?.isActive == true) return
+        qualityJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val known = Engine.albumQuality.value
+            val pending = Engine.albums(Engine.tracks.value).filter { it.id !in known }
+            val found = HashMap<Long, AlbumQuality>()
+            for (a in pending) {
+                val info = Library.audioInfo(getApplication(), a.tracks.first()) ?: continue
+                found[a.id] = AlbumQuality(info.bits, info.sampleRate, info.codec)
+                if (found.size >= 25) { Engine.putQuality(found.toMap()); found.clear() }
+            }
+            Engine.putQuality(found)
         }
     }
 
@@ -275,6 +303,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun removeFromQueue(i: Int) {
         val c = controller ?: return
         if (i in 0 until c.mediaItemCount && i != c.currentMediaItemIndex) c.removeMediaItem(i)
+    }
+
+    fun checkUpdatesQuiet() {
+        viewModelScope.launch { Updates.check(getApplication()) }
     }
 
     fun checkUpdates() {
