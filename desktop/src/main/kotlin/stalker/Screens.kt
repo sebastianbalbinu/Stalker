@@ -122,7 +122,7 @@ fun NowPanel(app: AppState, modifier: Modifier) {
     val t = p.current
     Card(modifier) {
         Column(Modifier.fillMaxSize().padding(22.dp)) {
-            T(if (p.playing) "SONANDO" else if (t != null) "EN EL PLATO" else "SALA", 10, FontWeight.SemiBold, C.Tenue, spacing = 2f)
+            T(if (p.playing) tr("SONANDO") else if (t != null) tr("EN EL PLATO") else tr("SALA"), 10, FontWeight.SemiBold, C.Tenue, spacing = 2f)
             Spacer(Modifier.height(14.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(92.dp).shadow(14.dp, RoundedCornerShape(5.dp))) {
@@ -130,9 +130,9 @@ fun NowPanel(app: AppState, modifier: Modifier) {
                 }
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
-                    T(t?.title ?: "Nada en el plato", 18, FontWeight.SemiBold, maxLines = 2)
+                    T(t?.title ?: tr("Nada en el plato"), 18, FontWeight.SemiBold, maxLines = 2)
                     Spacer(Modifier.height(4.dp))
-                    T(t?.artist ?: "Elige un disco", 13, color = C.Tenue)
+                    T(t?.artist ?: tr("Elige un disco"), 13, color = C.Tenue)
                     Spacer(Modifier.height(2.dp))
                     T(listOfNotNull(t?.album, t?.year?.ifBlank { null }).joinToString(" · "), 12, color = C.Apagado)
                 }
@@ -163,7 +163,7 @@ fun NowPanel(app: AppState, modifier: Modifier) {
                 T("${(p.volume * 100).toInt()} %", 11, color = C.Tenue, modifier = Modifier.width(38.dp))
             }
             if (p.volume < 0.999f && p.chain.exclusive) {
-                T("Al 100 % la señal sale intacta. Baja el volumen en tus audífonos o DAC.", 10, color = C.Apagado, maxLines = 2)
+                T(tr("Al 100 % la señal sale intacta. Baja el volumen en tus audífonos o DAC."), 10, color = C.Apagado, maxLines = 2)
             }
             p.message?.let {
                 Spacer(Modifier.height(10.dp))
@@ -177,8 +177,8 @@ fun NowPanel(app: AppState, modifier: Modifier) {
             Row(
                 Modifier.clip(RoundedCornerShape(50)).background(Color(0x12F1DFC4)).padding(3.dp),
             ) {
-                PanelTab("Pistas", app.panelTab == 0) { app.panelTab = 0 }
-                PanelTab(if (Jam.core.active) "Jam · ${Jam.core.peers.size.coerceAtLeast(1)}" else "Jam", app.panelTab == 1) { app.panelTab = 1 }
+                PanelTab(tr("Pistas"), app.panelTab == 0) { app.panelTab = 0 }
+                PanelTab(if (Jam.core.active) tr("Jam · %s", Jam.core.peers.size.coerceAtLeast(1)) else tr("Jam"), app.panelTab == 1) { app.panelTab = 1 }
             }
             Spacer(Modifier.height(10.dp))
             if (app.panelTab == 0) Tracklist(app, Modifier.weight(1f)) else JamView(app, Modifier.weight(1f))
@@ -220,30 +220,30 @@ fun SignalChain(p: Player) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x14F1DFC4)).padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            T("CADENA DE SEÑAL", 9, FontWeight.SemiBold, C.Tenue, spacing = 1.6f)
+            T(tr("CADENA DE SEÑAL"), 9, FontWeight.SemiBold, C.Tenue, spacing = 1.6f)
             Spacer(Modifier.weight(1f))
             if (t != null && c.mode != 0) {
                 if (p.bitPerfect) Box(Modifier.clip(RoundedCornerShape(50)).background(C.Rojo).padding(horizontal = 8.dp, vertical = 3.dp)) {
-                    T("BIT-PERFECT", 9, FontWeight.SemiBold, C.Crema, spacing = 1.2f)
+                    T(tr("BIT-PERFECT"), 9, FontWeight.SemiBold, C.Crema, spacing = 1.2f)
                 } else Box(Modifier.clip(RoundedCornerShape(50)).border(1.dp, C.Linea, RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 3.dp)) {
-                    T(if (!t.lossless) "CON PÉRDIDA" else "ALTA CALIDAD", 9, FontWeight.SemiBold, C.Tenue, spacing = 1.2f)
+                    T(if (!t.lossless) tr("CON PÉRDIDA") else tr("ALTA CALIDAD"), 9, FontWeight.SemiBold, C.Tenue, spacing = 1.2f)
                 }
             }
         }
         Spacer(Modifier.height(8.dp))
-        ChainRow("Archivo", t?.quality ?: "—")
+        ChainRow(tr("Archivo"), t?.quality ?: "—")
         val out = when {
             t == null || c.mode == 0 -> "—"
-            c.exclusive -> "WASAPI exclusivo · ${c.outValid}-bit · ${khz(c.outRate)}"
-            else -> "Windows (compartido) · ${khz(c.outRate)}"
+            c.exclusive -> tr("WASAPI exclusivo · %s-bit · %s", c.outValid, khz(c.outRate))
+            else -> tr("Windows (compartido) · %s", khz(c.outRate))
         }
-        ChainRow("Salida", out)
+        ChainRow(tr("Salida"), out)
         val note = when {
             t == null || c.mode == 0 -> null
-            p.bitPerfect -> "El DAC recibe exactamente los datos del archivo."
-            !c.exclusive && p.exclusive -> "El DAC no aceptó el modo exclusivo; Windows mezcla y ajusta la señal."
-            !c.exclusive -> "Windows mezcla con otras apps${if (c.outRate != c.srcRate) " y remuestrea a ${khz(c.outRate)}" else ""}."
-            p.volume < 0.999f -> "El volumen digital modifica la señal."
+            p.bitPerfect -> tr("El DAC recibe exactamente los datos del archivo.")
+            !c.exclusive && p.exclusive -> tr("El DAC no aceptó el modo exclusivo; Windows mezcla y ajusta la señal.")
+            !c.exclusive -> if (c.outRate != c.srcRate) tr("Windows mezcla con otras apps y remuestrea a %s.", khz(c.outRate)) else tr("Windows mezcla con otras apps.")
+            p.volume < 0.999f -> tr("El volumen digital modifica la señal.")
             else -> null
         }
         if (note != null) {
@@ -270,7 +270,7 @@ fun Tracklist(app: AppState, modifier: Modifier) {
     LaunchedEffect(p.index) { if (p.index >= 0) st.animateScrollToItem((p.index + 1).coerceAtLeast(0)) }
     if (q.isEmpty()) {
         Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            T("Pon un disco y la lista aparece aquí.", 12, color = C.Apagado)
+            T(tr("Pon un disco y la lista aparece aquí."), 12, color = C.Apagado)
         }
         return
     }
@@ -280,13 +280,13 @@ fun Tracklist(app: AppState, modifier: Modifier) {
     LazyColumn(modifier.fillMaxWidth(), state = st) {
         item {
             Row(Modifier.padding(bottom = 8.dp)) {
-                T(p.queueTitle.ifBlank { "Cola" }, 12, FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                T("${q.size} canciones · ${fmtLong(total)}", 11, color = C.Apagado)
+                T(Continuous.displayTitle(p.queueTitle).ifBlank { tr("Cola") }, 12, FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                T(tr("%s canciones · %s", q.size, fmtLong(total)), 11, color = C.Apagado)
             }
         }
         itemsIndexed(q) { i, t ->
-            if (i == 0 && sideB > 0) SideHeader("LADO A")
-            if (i == sideB && sideB > 0) SideHeader("LADO B")
+            if (i == 0 && sideB > 0) SideHeader(tr("LADO A"))
+            if (i == sideB && sideB > 0) SideHeader(tr("LADO B"))
             val cur = i == p.index
             val src = remember { MutableInteractionSource() }
             val hovered by src.collectIsHoveredAsState()
@@ -344,17 +344,19 @@ fun ShelfScreen(app: AppState) {
         Column(Modifier.fillMaxSize().padding(top = 58.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 40.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    T("Estantería", 30, FontWeight.SemiBold)
+                    T(tr("Estantería"), 30, FontWeight.SemiBold)
                     Spacer(Modifier.height(4.dp))
                     val size = app.tracks.sumOf { it.size }
                     T(
-                        if (app.scanning && app.tracks.isEmpty()) "Buscando música… ${app.scanCount}"
-                        else "${app.albums.size} discos · ${app.tracks.size} canciones · ${gb(size)}" + if (app.scanning) "  ·  buscando…" else "",
+                        if (app.scanning && app.tracks.isEmpty()) tr("Buscando música… %s", app.scanCount)
+                        else tr("%s discos · %s canciones · %s", app.albums.size, app.tracks.size, gb(size)) + if (app.scanning) tr("  ·  buscando…") else "",
                         12, color = C.Tenue,
                     )
                 }
                 SearchBox(app)
                 Spacer(Modifier.width(12.dp))
+                Pill("Rocola", { app.rocola(onlyFavorites = app.shelfMode == 1) }, ico = Ico.Shuffle)
+                Spacer(Modifier.width(6.dp))
                 Pill("Estantería", { app.shelfMode = 0; Prefs.shelfMode = 0 }, active = app.shelfMode == 0)
                 Spacer(Modifier.width(6.dp))
                 Pill("Favoritos", { app.shelfMode = 1 }, active = app.shelfMode == 1)
@@ -387,7 +389,7 @@ fun SearchBox(app: AppState) {
         Icon(Ico.Search, C.Tenue, 14.dp)
         Spacer(Modifier.width(8.dp))
         Box(Modifier.weight(1f)) {
-            if (app.query.isEmpty()) T("Buscar discos, artistas…", 12, color = C.Apagado)
+            if (app.query.isEmpty()) T(tr("Buscar discos, artistas…"), 12, color = C.Apagado)
             BasicTextField(
                 app.query, { app.query = it },
                 singleLine = true,
@@ -410,10 +412,10 @@ fun AlbumGrid(app: AppState) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 T(
                     when {
-                        app.scanning -> "Buscando tu música…"
-                        app.shelfMode == 1 -> "Marca discos con el corazón y aparecerán aquí."
-                        q.isNotEmpty() -> "Nada coincide con “${app.query}”."
-                        else -> "No encontramos música en tus carpetas."
+                        app.scanning -> tr("Buscando tu música…")
+                        app.shelfMode == 1 -> tr("Marca discos con el corazón y aparecerán aquí.")
+                        q.isNotEmpty() -> tr("Nada coincide con “%s”.", app.query)
+                        else -> tr("No encontramos música en tus carpetas.")
                     }, 14, color = C.Tenue,
                 )
                 if (!app.scanning && app.albums.isEmpty()) {
@@ -493,7 +495,7 @@ fun SleeveCard(app: AppState, a: Album) {
                     }
                 }
                 if (a.hiRes) Box(Modifier.align(Alignment.TopStart).padding(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xCC0B0706)).padding(horizontal = 6.dp, vertical = 3.dp)) {
-                    T("HI-RES", 8, FontWeight.SemiBold, C.Oro, spacing = 1f)
+                    T(tr("HI-RES"), 8, FontWeight.SemiBold, C.Oro, spacing = 1f)
                 }
                 if (hovered) {
                     RoundButton(
@@ -579,7 +581,7 @@ fun SongList(app: AppState) {
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
                     .background(if (cur) Color(0x22F1DFC4) else if (hovered) Color(0x12F1DFC4) else Color.Transparent)
                     .hoverable(src).pointerHoverIcon(Hand)
-                    .clickable(interactionSource = src, indication = null) { app.player.setQueue(list, i, "Canciones", true) }
+                    .clickable(interactionSource = src, indication = null) { app.player.setQueue(list, i, tr("Canciones"), true) }
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -610,7 +612,7 @@ fun NowBar(app: AppState) {
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     T(t.title, 14, FontWeight.SemiBold)
-                    T(t.artist + "  ·  " + t.quality + if (p.bitPerfect) "  ·  bit-perfect" else "", 11, color = C.Tenue)
+                    T(t.artist + "  ·  " + t.quality + if (p.bitPerfect) tr("  ·  bit-perfect") else "", 11, color = C.Tenue)
                 }
                 Box(Modifier.width(260.dp)) {
                     BarProgress(p, t)

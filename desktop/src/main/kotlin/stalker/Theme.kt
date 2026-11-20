@@ -45,7 +45,7 @@ val Inter = FontFamily(
 fun txt(size: TextUnit = 13.sp, weight: FontWeight = FontWeight.Normal, color: Color = C.Crema, spacing: TextUnit = 0.sp) =
     TextStyle(fontFamily = Inter, fontSize = size, fontWeight = weight, color = color, letterSpacing = spacing)
 
-enum class Ico { Play, Pause, Next, Prev, Mini, Minimize, Maximize, Restore, Close, Gear, Search, Folder, Shelf, Room, Expand, Heart, HeartOn, Plus, Trash, Speaker, Sun, Jam }
+enum class Ico { Play, Pause, Next, Prev, Mini, Minimize, Maximize, Restore, Close, Gear, Search, Folder, Shelf, Room, Expand, Heart, HeartOn, Plus, Trash, Speaker, Sun, Jam, Shuffle }
 
 /** Iconos dibujados a mano, finos y redondeados. */
 @Composable
@@ -105,6 +105,13 @@ fun DrawScope.drawIco(ico: Ico, color: Color) {
         Ico.Search -> {
             drawCircle(color, 0.24f * w, Offset(0.44f * w, 0.44f * w), style = s)
             drawLine(color, Offset(0.62f * w, 0.62f * w), Offset(0.82f * w, 0.82f * w), s.width, StrokeCap.Round)
+        }
+        Ico.Shuffle -> {
+            drawPath(p(0.14f, 0.30f, 0.32f, 0.30f, 0.66f, 0.70f, 0.86f, 0.70f), color, style = s)
+            drawPath(p(0.14f, 0.70f, 0.32f, 0.70f, 0.42f, 0.58f), color, style = s)
+            drawPath(p(0.56f, 0.42f, 0.66f, 0.30f, 0.86f, 0.30f), color, style = s)
+            drawPath(p(0.76f, 0.20f, 0.86f, 0.30f, 0.76f, 0.40f), color, style = s)
+            drawPath(p(0.76f, 0.60f, 0.86f, 0.70f, 0.76f, 0.80f), color, style = s)
         }
         Ico.Folder -> drawPath(p(0.12f, 0.28f, 0.4f, 0.28f, 0.48f, 0.36f, 0.88f, 0.36f, 0.88f, 0.78f, 0.12f, 0.78f, close = true), color, style = s)
         Ico.Shelf -> {

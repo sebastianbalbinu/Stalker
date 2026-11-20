@@ -41,6 +41,8 @@ class Player {
     var device by mutableIntStateOf(Prefs.device); private set
     /** Sube cada vez que el usuario baja la aguja: dispara la animación del brazo. */
     var drops by mutableIntStateOf(0); private set
+    /** Se llama cuando se acaba la cola (manual = el usuario tocó "siguiente" en la última canción). */
+    var onQueueEnd: ((manual: Boolean) -> Unit)? = null
     /** Minimizada: la posición se actualiza menos seguido (el audio no cambia). */
     @Volatile var background = false
 
@@ -82,16 +84,16 @@ class Player {
     }
 
     private fun load(i: Int, startMs: Long, play: Boolean) {
-        val l = Audio.lib ?: run { message = "No se encontró el motor de audio"; return }
+        val l = Audio.lib ?: run { message = tr("No se encontró el motor de audio"); return }
         val t = queue.getOrNull(i) ?: return
         val mode = l.sa_load(WString(t.path), t.bits, if (exclusive) 1 else 0, device)
         if (mode == 0) {
-            message = Audio.error().ifBlank { "No se pudo reproducir ${t.title}" }
+            message = Audio.error().ifBlank { tr("No se pudo reproducir %s", t.title) }
             playing = false
             loaded = false
             return
         }
-        message = if (exclusive && mode == 2) (Audio.error().ifBlank { "El DAC no aceptó el modo exclusivo" } + " · salida compartida") else null
+        message = if (exclusive && mode == 2) (Audio.error().ifBlank { tr("El DAC no aceptó el modo exclusivo") } + tr(" · salida compartida")) else null
         loaded = true
         suspended = false
         index = i
@@ -150,6 +152,7 @@ class Player {
 
     fun next() {
         if (index + 1 < queue.size) scope.launch { load(index + 1, 0, true) }
+        else if (queue.isNotEmpty()) onQueueEnd?.invoke(true)
     }
 
     fun prev() {
@@ -275,7 +278,7 @@ class Player {
             if (rate > 0) positionMs = l.sa_cursor() * 1000 / rate
             updateChain(info)
             if (info[11] == 1) {
-                message = "Se desconectó la salida de audio"
+                message = tr("Se desconectó la salida de audio")
                 load(index, positionMs, playing)
                 continue
             }
@@ -286,6 +289,7 @@ class Player {
                     pausedAt = System.currentTimeMillis()
                     positionMs = 0
                     l.sa_seek(0)
+                    onQueueEnd?.invoke(false)
                 }
             }
             if (!playing && info[10] == 0 && !suspended && pausedAt > 0 &&

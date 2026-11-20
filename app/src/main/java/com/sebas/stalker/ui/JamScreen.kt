@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sebas.stalker.tr
 import com.sebas.stalker.Jam
 import com.sebas.stalker.JamMsg
 
@@ -66,15 +67,15 @@ fun JamBar(onOpen: () -> Unit) {
         Icon(Ico.Jam, null, tint = C.Rojo, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         if (!core.active) {
-            Text("Escuchar juntos · Jam", style = Cuerpo.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = C.Rojo))
+            Text(tr("Escuchar juntos · Jam"), style = Cuerpo.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = C.Rojo))
         } else {
             Column(Modifier.weight(1f)) {
                 Text(
-                    "Jam ${core.code} · ${core.peers.size.coerceAtLeast(1)} en la sala · ${core.status}",
+                    tr("Jam %s · %s en la sala · %s", core.code, core.peers.size.coerceAtLeast(1), tr(core.status)),
                     style = Cuerpo.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Rojo), maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    last?.let { "${if (it.mine) "Tú" else it.name}: ${it.text}" } ?: "Toca para abrir el chat",
+                    last?.let { "${if (it.mine) tr("Tú") else it.name}: ${it.text}" } ?: tr("Toca para abrir el chat"),
                     style = Secundario.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
             }
@@ -111,25 +112,25 @@ private fun field(value: String, onChange: (String) -> Unit, hint: String, caps:
 private fun JamStart() {
     var name by remember { mutableStateOf(Jam.savedName) }
     var code by remember { mutableStateOf("") }
-    Text("Jam", style = Titulo.copy(fontSize = 28.sp))
+    Text(tr("Jam"), style = Titulo.copy(fontSize = 28.sp))
     Spacer(Modifier.height(4.dp))
     Text(
-        "Escuchen el mismo disco a la vez desde distintos lugares, en celular o PC, y conversen mientras suena. " +
-            "Cada uno escucha su propio FLAC: la música no viaja por internet, solo la aguja.",
+        tr("Escuchen el mismo disco a la vez desde distintos lugares, en celular o PC, y conversen mientras suena. ") +
+            tr("Cada uno escucha su propio FLAC: la música no viaja por internet, solo la aguja."),
         style = Secundario.copy(fontSize = 13.sp, lineHeight = 18.sp)
     )
     Spacer(Modifier.height(16.dp))
-    field(name, { name = it.take(24) }, "Tu nombre", modifier = Modifier.fillMaxWidth())
+    field(name, { name = it.take(24) }, tr("Tu nombre"), modifier = Modifier.fillMaxWidth())
     Spacer(Modifier.height(14.dp))
     Pill("Abrir una Jam con lo que suena", selected = true, modifier = Modifier.fillMaxWidth()) {
         Jam.savedName = name.trim()
         Jam.core.create(name)
     }
     Spacer(Modifier.height(18.dp))
-    Text("¿Te invitaron?", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
+    Text(tr("¿Te invitaron?"), style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
     Spacer(Modifier.height(8.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
-        field(code, { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(6) }, "Código", caps = true, modifier = Modifier.weight(1f))
+        field(code, { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(6) }, tr("Código"), caps = true, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(10.dp))
         Pill("Entrar", selected = false) {
             if (code.length >= 4) {
@@ -139,7 +140,7 @@ private fun JamStart() {
         }
     }
     Spacer(Modifier.height(8.dp))
-    Text("Para escuchar juntos, cada uno necesita el disco. Compártelo antes con «Compartir disco».", style = Secundario.copy(fontSize = 12.sp))
+    Text(tr("Para escuchar juntos, cada uno necesita el disco. Compártelo antes con «Compartir disco»."), style = Secundario.copy(fontSize = 12.sp))
 }
 
 @Composable
@@ -154,16 +155,16 @@ private fun JamRoom() {
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text("Jam", style = Secundario.copy(fontSize = 12.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Text(tr("Jam"), style = Secundario.copy(fontSize = 12.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Text(core.code ?: "", style = Titulo.copy(fontSize = 34.sp, letterSpacing = 6.sp))
-            Text(core.status + if (core.host) " · tú pones la música" else " · sigues la música de la sala", style = Secundario.copy(fontSize = 12.sp))
+            Text(tr(core.status) + if (core.host) tr(" · tú pones la música") else tr(" · sigues la música de la sala"), style = Secundario.copy(fontSize = 12.sp))
         }
         Pill("Invitar", selected = true) {
             val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(
                 Intent.EXTRA_TEXT,
-                "Escucha conmigo en Stalker 🎧 Abre la app → Jam → código ${core.code}\nDescárgala gratis: https://sebastianbalbinu.github.io/Stalker/"
+                tr("Escucha conmigo en Stalker 🎧 Abre la app → Jam → código %s\nDescárgala gratis: https://sebastianbalbinu.github.io/Stalker/", core.code)
             )
-            ctx.startActivity(Intent.createChooser(i, "Invitar a la Jam"))
+            ctx.startActivity(Intent.createChooser(i, tr("Invitar a la Jam")))
         }
     }
     Spacer(Modifier.height(12.dp))
@@ -175,7 +176,7 @@ private fun JamRoom() {
             ) {
                 Box(Modifier.size(7.dp).clip(CircleShape).background(if (p.host) C.Rojo else C.Piedra))
                 Spacer(Modifier.width(7.dp))
-                Text(p.name + if (p.id == core.myId) " (tú)" else "", style = Cuerpo.copy(fontSize = 13.sp))
+                Text(p.name + if (p.id == core.myId) tr(" (tú)") else "", style = Cuerpo.copy(fontSize = 13.sp))
                 Text("  ${p.device}", style = Secundario.copy(fontSize = 11.sp))
             }
         }
@@ -183,7 +184,11 @@ private fun JamRoom() {
     if (!core.host && missing.isNotEmpty()) {
         Spacer(Modifier.height(10.dp))
         Text(
-            "No tienes ${missing.size} ${if (missing.size == 1) "canción" else "canciones"} de este disco (${missing.take(2).joinToString(", ")}${if (missing.size > 2) "…" else ""}). Pide que te compartan el disco.",
+            tr(
+                if (missing.size == 1) "No tienes 1 canción de este disco (%s). Pide que te compartan el disco."
+                else "No tienes %s canciones de este disco (%s). Pide que te compartan el disco.",
+                *(if (missing.size == 1) arrayOf<Any>(missing.first()) else arrayOf<Any>(missing.size, missing.take(2).joinToString(", ") + if (missing.size > 2) "…" else ""))
+            ),
             style = Secundario.copy(fontSize = 12.sp, color = C.Rojo), modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(C.Rojo.copy(alpha = 0.08f)).padding(10.dp)
         )
     }
@@ -193,13 +198,13 @@ private fun JamRoom() {
     }
     Spacer(Modifier.height(10.dp))
     Row(Modifier.imePadding(), verticalAlignment = Alignment.CenterVertically) {
-        field(text, { text = it.take(500) }, "Escribe algo…", onDone = { Jam.core.chat(text); text = "" }, modifier = Modifier.weight(1f))
+        field(text, { text = it.take(500) }, tr("Escribe algo…"), onDone = { Jam.core.chat(text); text = "" }, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(8.dp))
         Pill("Enviar", selected = text.isNotBlank()) { Jam.core.chat(text); text = "" }
     }
     Spacer(Modifier.height(12.dp))
     Text(
-        if (core.host) "Cerrar la Jam" else "Salir de la Jam",
+        if (core.host) tr("Cerrar la Jam") else tr("Salir de la Jam"),
         style = Cuerpo.copy(color = C.Tierra, fontSize = 14.sp), textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { Jam.core.leave() }.padding(10.dp)
     )

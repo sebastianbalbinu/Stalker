@@ -112,6 +112,12 @@ object Engine {
     val purist = MutableStateFlow(false)
     /** El Lado A terminó y espera que le den vuelta. */
     val flipPending = MutableStateFlow(false)
+    /** Reproducción continua: al terminar un disco, entra el siguiente. */
+    val continuous = MutableStateFlow(true)
+    /** Qué disco sigue: "Estantería", "Al azar" o "Mismo artista". */
+    val nextOrder = MutableStateFlow("Estantería")
+    /** Discos que ya sonaron en esta cadena continua (para no repetir hasta pasar por todos). */
+    private val chainPlayed = mutableSetOf<String>()
 
     /** Descargas hechas desde la tienda (ids del DownloadManager). */
     val downloads = MutableStateFlow<Set<Long>>(emptySet())
@@ -136,6 +142,7 @@ object Engine {
     val presetFreqs = listOf(31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
 
     fun init(context: Context) {
+        I18n.init(context)
         if (prefs != null) return
         val p = context.applicationContext.getSharedPreferences("stalker", Context.MODE_PRIVATE)
         prefs = p
@@ -159,6 +166,8 @@ object Engine {
         libraryView.value = p.getString("libraryView", "Discos") ?: "Discos"
         includeShared.value = p.getBoolean("includeShared", true)
         purist.value = p.getBoolean("purist", false)
+        continuous.value = p.getBoolean("continuous", true)
+        nextOrder.value = p.getString("nextOrder", "Estantería") ?: "Estantería"
         lastStoreUrl.value = p.getString("storeUrl", null)
     }
 
@@ -192,6 +201,98 @@ object Engine {
     fun setPurist(on: Boolean) {
         purist.value = on
         prefs?.edit()?.putBoolean("purist", on)?.apply()
+    }
+
+    fun setContinuous(on: Boolean) {
+        continuous.value = on
+        prefs?.edit()?.putBoolean("continuous", on)?.apply()
+    }
+
+    fun setNextOrder(v: String) {
+        nextOrder.value = v
+        chainPlayed.clear()
+        prefs?.edit()?.putString("nextOrder", v)?.apply()
+    }
+
+    // ---------- Reproducción continua y Rocola ----------
+
+    const val ROCOLA = "Rocola"
+    const val ROCOLA_FAVS = "Rocola · Favoritos"
+
+    /** Nombre para mostrar de la cola (la Rocola se traduce; los discos y álbumes no). */
+    fun displayTitle(t: String): String = if (t == ROCOLA || t == ROCOLA_FAVS) tr(t) else t
+
+    /** Todas las canciones visibles mezcladas: sin repetir y sin dos seguidas del mismo disco. */
+    fun rocola(onlyFavorites: Boolean): List<Track> {
+        var pool = visible(tracks.value, hiddenAlbums.value, hiddenTracks.value)
+        if (onlyFavorites) pool = pool.filter { it.albumId in favorites.value }
+        val list = pool.shuffled().toMutableList()
+        for (i in 1 until list.size) {
+            if (list[i].albumId != list[i - 1].albumId) continue
+            val j = (i + 1 until list.size).firstOrNull { list[it].albumId != list[i - 1].albumId } ?: break
+            val t = list[i]; list[i] = list[j]; list[j] = t
+        }
+        return list
+    }
+
+    /**
+     * Lo que entra cuando termina la cola: el siguiente álbum (o el siguiente de "Mis discos"),
+     * según el orden elegido. Devuelve null si no corresponde seguir.
+     */
+    fun nextDisc(queueIds: List<Long>, title: String?): Pair<List<Track>, String>? {
+        if (!continuous.value) return null
+        if (title == ROCOLA || title == ROCOLA_FAVS) {
+            val again = rocola(title == ROCOLA_FAVS)
+            return if (again.isEmpty()) null else again to title
+        }
+        val queue = queueIds.mapNotNull { byId[it.toString()] }
+        if (queue.isEmpty()) return null
+
+        // Uno de "Mis discos": sigue el siguiente disco armado.
+        val mine = discos.value.filter { discoTracks(it).isNotEmpty() }
+        mine.firstOrNull { it.name == title }?.let { cur ->
+            val keys = mine.map { "d" + it.id }
+            val artists = mine.associate { d -> "d" + d.id to mainArtist(discoTracks(d)) }
+            val next = pickNext(keys, "d" + cur.id, artists) ?: return null
+            val d = mine.first { "d" + it.id == next }
+            return discoTracks(d).filter { it.id !in hiddenTracks.value } to d.name
+        }
+
+        // Un álbum completo (o parte de él): sigue el siguiente álbum de la estantería.
+        val albumIds = queue.map { it.albumId }.distinct()
+        if (albumIds.size != 1) return null
+        val shelf = albums(visible(tracks.value, hiddenAlbums.value, hiddenTracks.value))
+        if (shelf.isEmpty()) return null
+        val keys = shelf.map { "a" + it.id }
+        val artists = shelf.associate { "a" + it.id to it.artist.lowercase() }
+        val currentArtist = queue.first().artist.lowercase()
+        val next = pickNext(keys, "a" + albumIds.first(), artists, currentArtist) ?: return null
+        val a = shelf.first { "a" + it.id == next }
+        return a.tracks to a.title
+    }
+
+    private fun mainArtist(ts: List<Track>): String =
+        ts.groupingBy { it.artist.lowercase() }.eachCount().maxByOrNull { it.value }?.key ?: ""
+
+    private fun pickNext(keys: List<String>, current: String, artists: Map<String, String>, fallbackArtist: String? = null): String? {
+        if (keys.isEmpty()) return null
+        if (keys.size == 1 && keys[0] == current) return null
+        chainPlayed.add(current)
+        if (keys.all { it in chainPlayed }) { chainPlayed.clear(); chainPlayed.add(current) }
+        val at = keys.indexOf(current)
+        // En orden de estantería, empezando justo después del actual y dando la vuelta.
+        val ring = if (at < 0) keys else keys.drop(at + 1) + keys.take(at)
+        val fresh = ring.filter { it !in chainPlayed }
+        val pick = when (nextOrder.value) {
+            "Al azar" -> fresh.randomOrNull()
+            "Mismo artista" -> {
+                val artist = artists[current] ?: fallbackArtist
+                fresh.firstOrNull { artists[it] == artist } ?: fresh.firstOrNull()
+            }
+            else -> ring.firstOrNull()
+        } ?: ring.firstOrNull()
+        pick?.let { chainPlayed.add(it) }
+        return pick
     }
 
     fun moveInDisco(id: Long, from: Int, to: Int) {
@@ -366,7 +467,7 @@ object Engine {
             setNight(st.optString("night", nightMode.value))
             setReplayGain(st.optString("replayGain", replayGain.value))
         }
-        return "Restaurado: $discosOk discos, ${fav.size} favoritos"
+        return tr("Restaurado: %s discos, %s favoritos", discosOk, fav.size)
     }
 
     private fun readIds(s: String?): Set<Long> =
@@ -455,7 +556,7 @@ object Engine {
     // ---------- Mis discos ----------
 
     fun createDisco(name: String, firstTracks: List<Long> = emptyList()): Disco {
-        val d = Disco(System.currentTimeMillis(), name.ifBlank { "Disco sin nombre" }, firstTracks.distinct())
+        val d = Disco(System.currentTimeMillis(), name.ifBlank { tr("Disco sin nombre") }, firstTracks.distinct())
         discos.value = discos.value + d
         saveDiscos()
         return d

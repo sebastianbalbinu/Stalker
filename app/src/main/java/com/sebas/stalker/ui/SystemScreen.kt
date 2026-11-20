@@ -36,6 +36,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sebas.stalker.tr
 import com.sebas.stalker.Engine
 import com.sebas.stalker.OutputMode
 import com.sebas.stalker.PlayerViewModel
@@ -54,6 +55,9 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
     var showStats by remember { mutableStateOf(false) }
     val purist by Engine.purist.collectAsState()
     val shared by Engine.includeShared.collectAsState()
+    val continuous by Engine.continuous.collectAsState()
+    val language by com.sebas.stalker.I18n.choice.collectAsState()
+    val nextOrder by Engine.nextOrder.collectAsState()
     val updateStatus by com.sebas.stalker.Updates.status.collectAsState()
     val updateAvail by com.sebas.stalker.Updates.available.collectAsState()
     val night by Engine.nightMode.collectAsState()
@@ -65,21 +69,21 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
 
     CurtainSheet {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 190.dp)) {
-            ScreenHeader("Sistema")
+            ScreenHeader(tr("Sistema"))
             Spacer(Modifier.height(18.dp))
 
             Card {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Ico.Headphones, null, tint = if (usb != null) C.Rojo else C.Piedra, modifier = Modifier.size(24.dp))
                     Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                        Text(usb ?: "Sin DAC USB", style = Cuerpo.copy(fontWeight = FontWeight.Medium))
-                        Text(status, style = Secundario.copy(fontSize = 12.sp))
+                        Text(usb ?: tr("Sin DAC USB"), style = Cuerpo.copy(fontWeight = FontWeight.Medium))
+                        Text(tr(status), style = Secundario.copy(fontSize = 12.sp))
                     }
                 }
             }
 
             Spacer(Modifier.height(18.dp))
-            Text("SALIDA DE AUDIO", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Text(tr("SALIDA DE AUDIO"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             Card {
                 OutputMode.values().forEachIndexed { i, m ->
@@ -97,7 +101,7 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
                         }
                         Column(Modifier.weight(1f).padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(m.label, style = Cuerpo.copy(fontWeight = FontWeight.SemiBold, color = if (sel) C.Rojo else C.Carbon))
-                            Text(m.description, style = Secundario.copy(fontSize = 12.sp, lineHeight = 16.sp))
+                            Text(tr(m.description), style = Secundario.copy(fontSize = 12.sp, lineHeight = 16.sp))
                         }
                     }
                     if (i < OutputMode.values().size - 1) HorizontalDivider(color = C.Arena, thickness = 1.dp)
@@ -105,9 +109,9 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
             }
 
             Spacer(Modifier.height(18.dp))
-            Text("VOLUMEN PAREJO (REPLAYGAIN)", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Text(tr("VOLUMEN PAREJO (REPLAYGAIN)"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(4.dp))
-            Text("Iguala el volumen entre discos usando las etiquetas del FLAC. No actúa en Bit-perfect.", style = Secundario.copy(fontSize = 12.sp))
+            Text(tr("Iguala el volumen entre discos usando las etiquetas del FLAC. No actúa en Bit-perfect."), style = Secundario.copy(fontSize = 12.sp))
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Apagado", "Pista", "Álbum").forEach { m ->
@@ -116,7 +120,7 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
             }
 
             Spacer(Modifier.height(18.dp))
-            Text("APARIENCIA", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Text(tr("APARIENCIA"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Claro", "Noche", "Sistema").forEach { m ->
@@ -125,33 +129,61 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
             }
 
             Spacer(Modifier.height(18.dp))
-            Text("DISCOS", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Text(tr("IDIOMA"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Sistema", "Español", "English").forEach { m ->
+                    Pill(m, selected = language == m, modifier = Modifier.weight(1f)) { com.sebas.stalker.I18n.set(m) }
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Text(tr("REPRODUCCIÓN CONTINUA"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             Card {
-                ToggleRow(Ico.Disc, "Dar vuelta al disco", "Al terminar el Lado A, el disco se detiene para que le des vuelta, como un vinilo de verdad", purist) {
+                ToggleRow(Ico.Repeat, tr("Seguir con otro disco"), tr("Cuando termina un disco, el brazo vuelve y entra el siguiente"), continuous) {
+                    Engine.setContinuous(it)
+                }
+            }
+            if (continuous) {
+                Spacer(Modifier.height(10.dp))
+                Text(tr("Qué disco sigue"), style = Secundario.copy(fontSize = 12.sp))
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Estantería", "Al azar", "Mismo artista").forEach { m ->
+                        Pill(m, selected = nextOrder == m, modifier = Modifier.weight(1f)) { Engine.setNextOrder(m) }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Text(tr("DISCOS"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Spacer(Modifier.height(10.dp))
+            Card {
+                ToggleRow(Ico.Disc, tr("Dar vuelta al disco"), tr("Al terminar el Lado A, el disco se detiene para que le des vuelta, como un vinilo de verdad"), purist) {
                     Engine.setPurist(it)
                 }
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
-                ToggleRow(Ico.Download, "Música de WhatsApp y Telegram", "Incluye las canciones que te mandan por chat (nunca las notas de voz)", shared) {
+                ToggleRow(Ico.Download, tr("Música de WhatsApp y Telegram"), tr("Incluye las canciones que te mandan por chat (nunca las notas de voz)"), shared) {
                     Engine.setIncludeShared(it)
                     vm.rescan()
                 }
             }
 
             Spacer(Modifier.height(18.dp))
-            Text("ALMACENAMIENTO", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Text(tr("ALMACENAMIENTO"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             StorageCard(tracks)
 
             Spacer(Modifier.height(18.dp))
             Card {
-                SettingRow(Ico.Chart, "Tus estadísticas", "Discos y canciones más escuchados") { showStats = true }
+                SettingRow(Ico.Chart, tr("Tus estadísticas"), tr("Discos y canciones más escuchados")) { showStats = true }
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
-                SettingRow(Ico.Upload, "Guardar respaldo", "Discos, favoritos, ocultos, estadísticas y ajustes en un archivo") { onExport() }
+                SettingRow(Ico.Upload, tr("Guardar respaldo"), tr("Discos, favoritos, ocultos, estadísticas y ajustes en un archivo")) { onExport() }
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
-                SettingRow(Ico.Download, "Restaurar respaldo", "Desde un archivo de Stalker, por ejemplo en otro celular") { onImport() }
+                SettingRow(Ico.Download, tr("Restaurar respaldo"), tr("Desde un archivo de Stalker, por ejemplo en otro celular")) { onImport() }
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
-                SettingRow(Ico.Bag, "Conseguir música en FLAC", "Por si no tienes algún disco en buena calidad") { onOpenStore() }
+                SettingRow(Ico.Bag, tr("Conseguir música en FLAC"), tr("Por si no tienes algún disco en buena calidad")) { onOpenStore() }
             }
 
             Spacer(Modifier.height(18.dp))
@@ -162,8 +194,8 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
                 ) {
                     Icon(Ico.Refresh, null, tint = C.Carbon, modifier = Modifier.size(22.dp))
                     Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                        Text("Biblioteca", style = Cuerpo.copy(fontWeight = FontWeight.Medium))
-                        Text("${tracks.size} canciones · sin audios de WhatsApp ni grabaciones · toca para escanear", style = Secundario.copy(fontSize = 12.sp))
+                        Text(tr("Biblioteca"), style = Cuerpo.copy(fontWeight = FontWeight.Medium))
+                        Text(tr("%s canciones · sin audios de WhatsApp ni grabaciones · toca para escanear", tracks.size), style = Secundario.copy(fontSize = 12.sp))
                     }
                 }
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
@@ -173,8 +205,8 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
                 ) {
                     Icon(Ico.Hide, null, tint = C.Carbon, modifier = Modifier.size(22.dp))
                     Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                        Text("Ocultos", style = Cuerpo.copy(fontWeight = FontWeight.Medium))
-                        Text("${hAlbums.size} álbumes · ${hTracks.size} canciones", style = Secundario.copy(fontSize = 12.sp))
+                        Text(tr("Ocultos"), style = Cuerpo.copy(fontWeight = FontWeight.Medium))
+                        Text(tr("%s álbumes · %s canciones", hAlbums.size, hTracks.size), style = Secundario.copy(fontSize = 12.sp))
                     }
                     Icon(Ico.Right, null, tint = C.Tierra, modifier = Modifier.size(16.dp))
                 }
@@ -182,10 +214,10 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
                 Row(Modifier.fillMaxWidth().clickable { vm.checkUpdates() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Image(painterResource(R.drawable.logo), null, Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)))
                     Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                        Text("Acerca de Stalker", style = Cuerpo.copy(fontWeight = FontWeight.Medium))
-                        Text("Versión $version · Media3 · FLAC / WAV / ALAC / MP3", style = Secundario.copy(fontSize = 12.sp))
+                        Text(tr("Acerca de Stalker"), style = Cuerpo.copy(fontWeight = FontWeight.Medium))
+                        Text(tr("Versión %s · Media3 · FLAC / WAV / ALAC / MP3", version), style = Secundario.copy(fontSize = 12.sp))
                         Text(
-                            updateStatus.ifBlank { "Toca para buscar actualizaciones" },
+                            updateStatus.ifBlank { tr("Toca para buscar actualizaciones") },
                             style = Secundario.copy(fontSize = 12.sp, color = if (updateAvail != null) C.Rojo else C.Tierra)
                         )
                     }
@@ -222,7 +254,7 @@ private fun codecOf(mime: String): String = when {
     mime.contains("mp4", true) || mime.contains("aac", true) || mime.contains("alac", true) -> "AAC / ALAC"
     mime.contains("wav", true) -> "WAV"
     mime.contains("ogg", true) || mime.contains("opus", true) -> "OGG"
-    else -> "Otros"
+    else -> tr("Otros")
 }
 
 /** Cuánto pesa tu música, por formato, y cuánto espacio libre queda en el teléfono. */
@@ -248,7 +280,7 @@ private fun StorageCard(tracks: List<com.sebas.stalker.Track>) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(fmtBytes(total), style = Titulo.copy(fontSize = 30.sp))
                 Spacer(Modifier.size(8.dp))
-                Text("de música · ${tracks.size} canciones", style = Secundario, modifier = Modifier.padding(bottom = 5.dp))
+                Text(tr("de música · %s canciones", tracks.size), style = Secundario, modifier = Modifier.padding(bottom = 5.dp))
             }
             if (total > 0) {
                 Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(C.Arena)) {
@@ -269,7 +301,7 @@ private fun StorageCard(tracks: List<com.sebas.stalker.Track>) {
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
                 val pct = (total.toDouble() / capacity * 100)
                 Text(
-                    "Tu música ocupa ${"%.1f".format(pct)} % del teléfono · quedan ${fmtBytes(free)} libres de ${fmtBytes(capacity)}",
+                    tr("Tu música ocupa %s %% del teléfono · quedan %s libres de %s", "%.1f".format(pct), fmtBytes(free), fmtBytes(capacity)),
                     style = Secundario.copy(fontSize = 12.sp)
                 )
             }

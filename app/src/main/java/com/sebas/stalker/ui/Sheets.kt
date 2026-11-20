@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sebas.stalker.tr
 import com.sebas.stalker.Engine
 import com.sebas.stalker.Track
 
@@ -121,7 +122,7 @@ fun NameDialog(title: String, initial: String, confirm: String, onDismiss: () ->
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
-                placeholder = { Text("Nombre del disco", style = Cuerpo.copy(color = C.Piedra)) },
+                placeholder = { Text(tr("Nombre del disco"), style = Cuerpo.copy(color = C.Piedra)) },
                 textStyle = Cuerpo,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = C.Rojo,
@@ -136,7 +137,7 @@ fun NameDialog(title: String, initial: String, confirm: String, onDismiss: () ->
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar", style = Cuerpo.copy(color = C.Tierra)) }
+            TextButton(onClick = onDismiss) { Text(tr("Cancelar"), style = Cuerpo.copy(color = C.Tierra)) }
         },
     )
 }
@@ -147,8 +148,8 @@ fun AddToDiscoSheet(trackIds: List<Long>, onDismiss: () -> Unit) {
     val discos by Engine.discos.collectAsState()
     var naming by remember { mutableStateOf(false) }
     StalkerSheet(onDismiss) {
-        Text("Añadir a un disco", style = Titulo.copy(fontSize = 24.sp))
-        Text(if (trackIds.size == 1) "1 canción" else "${trackIds.size} canciones", style = Secundario)
+        Text(tr("Añadir a un disco"), style = Titulo.copy(fontSize = 24.sp))
+        Text(if (trackIds.size == 1) tr("1 canción") else tr("%s canciones", trackIds.size), style = Secundario)
         Spacer(Modifier.height(14.dp))
         Card {
             Row(
@@ -159,7 +160,7 @@ fun AddToDiscoSheet(trackIds: List<Long>, onDismiss: () -> Unit) {
                     Icon(Ico.Plus, null, tint = C.SobreRojo, modifier = Modifier.size(20.dp))
                 }
                 Spacer(Modifier.width(14.dp))
-                Text("Nuevo disco", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold, color = C.Rojo))
+                Text(tr("Nuevo disco"), style = Cuerpo.copy(fontWeight = FontWeight.SemiBold, color = C.Rojo))
             }
             discos.forEach { d ->
                 HorizontalDivider(color = C.Arena, thickness = 1.dp)
@@ -171,14 +172,14 @@ fun AddToDiscoSheet(trackIds: List<Long>, onDismiss: () -> Unit) {
                     Cover(Engine.discoTracks(d).firstOrNull(), Modifier.size(40.dp), corner = 8.dp)
                     Column(Modifier.weight(1f).padding(start = 14.dp)) {
                         Text(d.name, style = Cuerpo.copy(fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("${d.trackIds.size} canciones", style = Secundario.copy(fontSize = 12.sp))
+                        Text(tr("%s canciones", d.trackIds.size), style = Secundario.copy(fontSize = 12.sp))
                     }
                 }
             }
         }
     }
     if (naming) {
-        NameDialog("Nuevo disco", "", "Crear", onDismiss = { naming = false }) { name ->
+        NameDialog(tr("Nuevo disco"), "", tr("Crear"), onDismiss = { naming = false }) { name ->
             Engine.createDisco(name, trackIds)
             onDismiss()
         }
@@ -204,8 +205,8 @@ fun QueueSheet(
     val haptic = LocalHapticFeedback.current
     val half = (rows.size + 1) / 2
     StalkerSheet(onDismiss) {
-        Text(title ?: "En el tocadiscos", style = Titulo.copy(fontSize = 24.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text("${queue.size} pistas · arrastra ≡ para cambiar el orden", style = Secundario)
+        Text(title ?: tr("En el tocadiscos"), style = Titulo.copy(fontSize = 24.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(tr("%s pistas · arrastra ≡ para cambiar el orden", queue.size), style = Secundario)
         Spacer(Modifier.height(10.dp))
         LazyColumn(Modifier.heightIn(max = 520.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
             itemsIndexed(rows, key = { _, r -> r.first }) { i, (key, t) ->
@@ -221,7 +222,7 @@ fun QueueSheet(
                 ) {
                     if (dragKey == null && (i == 0 || i == half) && rows.size > 1) {
                         Text(
-                            if (i == 0) "LADO A" else "LADO B",
+                            if (i == 0) tr("LADO A") else tr("LADO B"),
                             style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold),
                             modifier = Modifier.padding(top = 14.dp, bottom = 6.dp)
                         )
@@ -254,7 +255,7 @@ fun QueueSheet(
                                     onRemove(i)
                                 },
                                 contentAlignment = Alignment.Center
-                            ) { Icon(Ico.Close, "Quitar de la cola", tint = C.Tierra, modifier = Modifier.size(16.dp)) }
+                            ) { Icon(Ico.Close, tr("Quitar de la cola"), tint = C.Tierra, modifier = Modifier.size(16.dp)) }
                         } else Spacer(Modifier.width(40.dp))
                         // manija para arrastrar
                         Box(
@@ -291,7 +292,7 @@ fun QueueSheet(
                                 )
                             },
                             contentAlignment = Alignment.Center
-                        ) { Icon(Ico.Grip, "Mover", tint = if (dragging) C.Rojo else C.Tierra, modifier = Modifier.size(20.dp)) }
+                        ) { Icon(Ico.Grip, tr("Mover"), tint = if (dragging) C.Rojo else C.Tierra, modifier = Modifier.size(20.dp)) }
                     }
                 }
             }
@@ -308,18 +309,18 @@ fun HiddenSheet(onDismiss: () -> Unit) {
     val albums = remember(all, hAlbums) { Engine.albums(all.filter { it.albumId in hAlbums }) }
     val tracks = remember(all, hTracks) { all.filter { it.id in hTracks } }
     StalkerSheet(onDismiss) {
-        Text("Ocultos", style = Titulo.copy(fontSize = 24.sp))
-        Text("Toca Mostrar para devolverlos a la biblioteca", style = Secundario)
+        Text(tr("Ocultos"), style = Titulo.copy(fontSize = 24.sp))
+        Text(tr("Toca Mostrar para devolverlos a la biblioteca"), style = Secundario)
         Spacer(Modifier.height(12.dp))
         if (albums.isEmpty() && tracks.isEmpty()) {
-            Text("No has ocultado nada.", style = Cuerpo.copy(color = C.Tierra), modifier = Modifier.padding(vertical = 24.dp))
+            Text(tr("No has ocultado nada."), style = Cuerpo.copy(color = C.Tierra), modifier = Modifier.padding(vertical = 24.dp))
         }
         LazyColumn(Modifier.heightIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(albums, key = { "a" + it.id }) { a ->
-                HiddenRow(a.title, "Álbum · ${a.artist}") { Engine.hideAlbum(a.id, false) }
+                HiddenRow(a.title, tr("Álbum · %s", a.artist)) { Engine.hideAlbum(a.id, false) }
             }
             items(tracks, key = { "t" + it.id }) { t ->
-                HiddenRow(t.title, "Canción · ${t.artist}") { Engine.hideTrack(t.id, false) }
+                HiddenRow(t.title, tr("Canción · %s", t.artist)) { Engine.hideTrack(t.id, false) }
             }
         }
     }
@@ -350,13 +351,13 @@ fun TimerSheet(onDismiss: () -> Unit) {
         }
     }
     StalkerSheet(onDismiss) {
-        Text("Temporizador", style = Titulo.copy(fontSize = 24.sp))
+        Text(tr("Temporizador"), style = Titulo.copy(fontSize = 24.sp))
         val left = at?.let { ((it - now) / 1000).coerceAtLeast(0) }
         Text(
             when {
-                left != null -> "La música se apaga en ${left / 60}:${"%02d".format(left % 60)}, con un desvanecido suave"
-                endDisco -> "La música se apaga al terminar el disco"
-                else -> "Apaga la música sola, ideal para dormir"
+                left != null -> tr("La música se apaga en %s:%s, con un desvanecido suave", left / 60, "%02d".format(left % 60))
+                endDisco -> tr("La música se apaga al terminar el disco")
+                else -> tr("Apaga la música sola, ideal para dormir")
             },
             style = Secundario
         )
@@ -434,12 +435,12 @@ fun LyricsSheet(tags: Map<String, String>, posMs: Long, title: String?, onSeek: 
         if (current >= 0) listState.animateScrollToItem((current - 2).coerceAtLeast(0))
     }
     StalkerSheet(onDismiss) {
-        Text(title ?: "Letra", style = Titulo.copy(fontSize = 24.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(if (synced) "Sincronizada · toca una línea para ir ahí" else "Letra", style = Secundario)
+        Text(title ?: tr("Letra"), style = Titulo.copy(fontSize = 24.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(if (synced) tr("Sincronizada · toca una línea para ir ahí") else tr("Letra"), style = Secundario)
         Spacer(Modifier.height(10.dp))
         if (lines.isEmpty()) {
             Text(
-                "Este archivo no trae letra. Puedes incrustarla en tus FLAC con MusicBrainz Picard o Mp3tag (campo LYRICS, en formato LRC si la quieres sincronizada).",
+                tr("Este archivo no trae letra. Puedes incrustarla en tus FLAC con MusicBrainz Picard o Mp3tag (campo LYRICS, en formato LRC si la quieres sincronizada)."),
                 style = Cuerpo.copy(color = C.Tierra, lineHeight = 22.sp),
                 modifier = Modifier.padding(vertical = 20.dp)
             )
@@ -487,23 +488,23 @@ fun StatsSheet(onDismiss: () -> Unit) {
             .sortedByDescending { it.second }.take(5)
     }
     StalkerSheet(onDismiss) {
-        Text("Tus estadísticas", style = Titulo.copy(fontSize = 24.sp))
+        Text(tr("Tus estadísticas"), style = Titulo.copy(fontSize = 24.sp))
         val h = listened / 3_600_000
         val m = (listened / 60_000) % 60
-        Text("Has escuchado ${h} h ${m} min en Stalker", style = Secundario)
+        Text(tr("Has escuchado %s h %s min en Stalker", h, m), style = Secundario)
         Spacer(Modifier.height(14.dp))
         LazyColumn(Modifier.heightIn(max = 560.dp)) {
             item {
-                Text("DISCOS MÁS ESCUCHADOS", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+                Text(tr("DISCOS MÁS ESCUCHADOS"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
                 Spacer(Modifier.height(8.dp))
             }
-            if (topAlbums.isEmpty()) item { Text("Aún no hay datos. Escucha un rato y vuelve.", style = Cuerpo.copy(color = C.Tierra)) }
+            if (topAlbums.isEmpty()) item { Text(tr("Aún no hay datos. Escucha un rato y vuelve."), style = Cuerpo.copy(color = C.Tierra)) }
             itemsIndexed(topAlbums) { i, (t, n) ->
                 StatRow(i + 1, t, t.album, t.artist, n)
             }
             item {
                 Spacer(Modifier.height(16.dp))
-                Text("CANCIONES MÁS ESCUCHADAS", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+                Text(tr("CANCIONES MÁS ESCUCHADAS"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
                 Spacer(Modifier.height(8.dp))
             }
             itemsIndexed(topTracks) { i, (t, n) ->
@@ -522,6 +523,6 @@ private fun StatRow(pos: Int, t: Track, title: String, sub: String, n: Int) {
             Text(title, style = Cuerpo.copy(fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(sub, style = Secundario.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(if (n == 1) "1 vez" else "$n veces", style = Secundario.copy(fontSize = 12.sp))
+        Text(if (n == 1) tr("1 vez") else tr("%s veces", n), style = Secundario.copy(fontSize = 12.sp))
     }
 }

@@ -140,7 +140,7 @@ object Jam {
         if (!changed) return
         idx = p.index; playing = p.playing; pos = p.positionMs; at = now; paths = ps
         core.publish(JamState(
-            p.queueTitle.ifBlank { q.getOrNull(p.index)?.album ?: "Disco" },
+            p.queueTitle.ifBlank { q.getOrNull(p.index)?.album ?: tr("Disco") },
             q.map { JamTrack(it.title, it.artist, it.album, it.durationMs) },
             p.index, p.positionMs, p.playing,
         ))
@@ -210,28 +210,28 @@ private fun JamStart(app: AppState, modifier: Modifier) {
     var name by remember { mutableStateOf(Jam.savedName) }
     var code by remember { mutableStateOf("") }
     Column(modifier.fillMaxWidth()) {
-        T("Escuchar juntos", 15, FontWeight.SemiBold)
+        T(tr("Escuchar juntos"), 15, FontWeight.SemiBold)
         Spacer(Modifier.height(6.dp))
-        T("El mismo disco, a la vez, desde otro PC o un celular, con chat. Cada uno escucha su propio FLAC: por internet solo viaja la aguja.",
+        T(tr("El mismo disco, a la vez, desde otro PC o un celular, con chat. Cada uno escucha su propio FLAC: por internet solo viaja la aguja."),
             11, color = C.Tenue, maxLines = 4)
         Spacer(Modifier.height(14.dp))
-        Field(name, { name = it.take(24) }, "Tu nombre", app)
+        Field(name, { name = it.take(24) }, tr("Tu nombre"), app)
         Spacer(Modifier.height(10.dp))
         Pill("Abrir una Jam con lo que suena", {
             Jam.savedName = name.trim(); Jam.core.create(name)
         }, Modifier.fillMaxWidth(), active = true, ico = Ico.Jam)
         Spacer(Modifier.height(18.dp))
-        T("¿Te invitaron?", 12, FontWeight.Medium)
+        T(tr("¿Te invitaron?"), 12, FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Field(code, { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(6) }, "Código", app, Modifier.weight(1f)) {
+            Field(code, { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(6) }, tr("Código"), app, Modifier.weight(1f)) {
                 if (code.length >= 4) { Jam.savedName = name.trim(); Jam.core.join(code, name) }
             }
             Spacer(Modifier.width(8.dp))
             Pill("Entrar", { if (code.length >= 4) { Jam.savedName = name.trim(); Jam.core.join(code, name) } })
         }
         Spacer(Modifier.height(10.dp))
-        T("Cada uno necesita el disco. Desde el celular: «Compartir disco»; en el PC se abre en Ajustes.", 10, color = C.Apagado, maxLines = 3)
+        T(tr("Cada uno necesita el disco. Desde el celular: «Compartir disco»; en el PC se abre en Ajustes."), 10, color = C.Apagado, maxLines = 3)
     }
 }
 
@@ -246,12 +246,12 @@ private fun JamRoom(app: AppState, modifier: Modifier) {
     Column(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                T("JAM", 9, FontWeight.SemiBold, C.Tenue, spacing = 2f)
+                T(tr("JAM"), 9, FontWeight.SemiBold, C.Tenue, spacing = 2f)
                 T(core.code ?: "", 26, FontWeight.SemiBold, spacing = 5f)
-                T(core.status + if (core.host) " · tú pones la música" else " · sigues la sala", 10, color = C.Apagado)
+                T(tr(core.status) + if (core.host) tr(" · tú pones la música") else tr(" · sigues la sala"), 10, color = C.Apagado)
             }
             Pill("Copiar invitación", {
-                val s = "Escucha conmigo en Stalker: abre la app → Jam → código ${core.code}\nGratis: https://sebastianbalbinu.github.io/Stalker/"
+                val s = tr("Escucha conmigo en Stalker: abre la app → Jam → código %s\nGratis: https://sebastianbalbinu.github.io/Stalker/", core.code)
                 Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(s), null)
             })
         }
@@ -262,14 +262,15 @@ private fun JamRoom(app: AppState, modifier: Modifier) {
                     verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(6.dp).clip(CircleShape).background(if (p.host) C.RojoVivo else C.Apagado))
                     Spacer(Modifier.width(5.dp))
-                    T(p.name + if (p.id == core.myId) " (tú)" else "", 10)
+                    T(p.name + if (p.id == core.myId) tr(" (tú)") else "", 10)
                 }
             }
         }
         if (!core.host && Jam.missing.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0x338E0E0E)).padding(8.dp)) {
-                T("No tienes ${Jam.missing.size} ${if (Jam.missing.size == 1) "canción" else "canciones"} de este disco. Pide que te lo compartan.", 10, maxLines = 2)
+                T(if (Jam.missing.size == 1) tr("No tienes 1 canción de este disco. Pide que te lo compartan.")
+                else tr("No tienes %s canciones de este disco. Pide que te lo compartan.", Jam.missing.size), 10, maxLines = 2)
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -290,7 +291,7 @@ private fun JamRoom(app: AppState, modifier: Modifier) {
         }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Field(text, { text = it.take(500) }, "Escribe algo…", app, Modifier.weight(1f)) { send() }
+            Field(text, { text = it.take(500) }, tr("Escribe algo…"), app, Modifier.weight(1f)) { send() }
             Spacer(Modifier.width(6.dp))
             RoundButton(Ico.Next, { send() }, 34.dp, 13.dp, tint = C.Sombra, filled = C.Crema)
         }
@@ -300,6 +301,6 @@ private fun JamRoom(app: AppState, modifier: Modifier) {
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { core.leave() }
                 .padding(6.dp),
             contentAlignment = Alignment.Center,
-        ) { T(if (core.host) "Cerrar la Jam" else "Salir de la Jam", 11, color = C.Tenue) }
+        ) { T(if (core.host) tr("Cerrar la Jam") else tr("Salir de la Jam"), 11, color = C.Tenue) }
     }
 }

@@ -64,6 +64,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.sebas.stalker.tr
 import com.sebas.stalker.DownloadInfo
 import com.sebas.stalker.Downloads
 import com.sebas.stalker.Engine
@@ -123,10 +124,10 @@ class BrowserState(context: Context) {
         setDownloadListener { dlUrl, userAgent, contentDisposition, mimetype, _ ->
             val name = Downloads.enqueue(context, dlUrl, userAgent, contentDisposition, mimetype)
             val msg = when {
-                name == null -> "No se pudo empezar la descarga"
-                Downloads.isZip(name) -> "Descargando $name · se descomprime solo al terminar"
-                Downloads.isAudio(name) -> "Descargando $name a Música/Stalker"
-                else -> "Descargando $name a Descargas"
+                name == null -> tr("No se pudo empezar la descarga")
+                Downloads.isZip(name) -> tr("Descargando %s · se descomprime solo al terminar", name)
+                Downloads.isAudio(name) -> tr("Descargando %s a Música/Stalker", name)
+                else -> tr("Descargando %s a Descargas", name)
             }
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }
@@ -152,9 +153,9 @@ class BrowserState(context: Context) {
 private data class Shop(val name: String, val blurb: String, val url: String, val tag: String)
 
 private val shops = listOf(
-    Shop("Bandcamp", "Compra directo a los artistas. Descarga en FLAC; mucha música es de \"paga lo que quieras\".", "https://bandcamp.com", "FLAC · Artistas"),
-    Shop("Qobuz", "Tienda de descargas Hi-Res, hasta 24 bit / 192 kHz.", "https://www.qobuz.com/shop", "Hi-Res"),
-    Shop("Live Music Archive", "Miles de conciertos en FLAC, gratis y legales, de bandas que permiten grabarlos.", "https://archive.org/details/etree", "Gratis"),
+    Shop("Bandcamp", tr("Compra directo a los artistas. Descarga en FLAC; mucha música es de \"paga lo que quieras\"."), "https://bandcamp.com", tr("FLAC · Artistas")),
+    Shop("Qobuz", tr("Tienda de descargas Hi-Res, hasta 24 bit / 192 kHz."), "https://www.qobuz.com/shop", tr("Hi-Res")),
+    Shop("Live Music Archive", tr("Miles de conciertos en FLAC, gratis y legales, de bandas que permiten grabarlos."), "https://archive.org/details/etree", tr("Gratis")),
 )
 
 @Composable
@@ -173,11 +174,11 @@ fun StoreScreen(browser: BrowserState, bottomPadding: androidx.compose.ui.unit.D
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SoftButton(Ico.Back, "Atrás", size = 40.dp) { browser.back() }
+                SoftButton(Ico.Back, tr("Atrás"), size = 40.dp) { browser.back() }
                 Spacer(Modifier.width(8.dp))
                 AddressBar(browser, Modifier.weight(1f))
                 Spacer(Modifier.width(8.dp))
-                SoftButton(if (browser.loading) Ico.Close else Ico.Refresh, if (browser.loading) "Detener" else "Recargar", size = 40.dp) {
+                SoftButton(if (browser.loading) Ico.Close else Ico.Refresh, if (browser.loading) tr("Detener") else tr("Recargar"), size = 40.dp) {
                     if (browser.loading) browser.web.stopLoading() else browser.web.reload()
                 }
                 Spacer(Modifier.width(8.dp))
@@ -246,7 +247,7 @@ private fun AddressBar(browser: BrowserState, modifier: Modifier) {
 @Composable
 private fun DownloadsButton(active: Int, onClick: () -> Unit) {
     Box {
-        SoftButton(Ico.Download, "Descargas", size = 40.dp, onClick = onClick)
+        SoftButton(Ico.Download, tr("Descargas"), size = 40.dp, onClick = onClick)
         if (active > 0) {
             Box(
                 Modifier.align(Alignment.TopEnd).size(18.dp).clip(CircleShape).background(C.Rojo),
@@ -264,13 +265,13 @@ private fun StoreHome(browser: BrowserState, bottomPadding: androidx.compose.ui.
     CurtainSheet {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = bottomPadding + 24.dp)) {
             ScreenHeader(
-                "Conseguir FLAC",
-                leading = { SoftButton(Ico.Back, "Volver a Sistema", onClick = onExit) },
+                tr("Conseguir FLAC"),
+                leading = { SoftButton(Ico.Back, tr("Volver a Sistema"), onClick = onExit) },
                 trailing = { DownloadsButton(active, onDownloads) }
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "Por si te falta algún disco en buena calidad. Un navegador sencillo: lo que descargues aparece solo en tu biblioteca.",
+                tr("Por si te falta algún disco en buena calidad. Un navegador sencillo: lo que descargues aparece solo en tu biblioteca."),
                 style = Secundario.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -280,7 +281,7 @@ private fun StoreHome(browser: BrowserState, bottomPadding: androidx.compose.ui.
                 onValueChange = { query = it },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Escribe una dirección o busca", style = Cuerpo.copy(color = C.Piedra)) },
+                placeholder = { Text(tr("Escribe una dirección o busca"), style = Cuerpo.copy(color = C.Piedra)) },
                 leadingIcon = { Icon(Ico.Search, null, tint = C.Tierra, modifier = Modifier.size(20.dp)) },
                 textStyle = Cuerpo,
                 shape = RoundedCornerShape(22.dp),
@@ -301,14 +302,14 @@ private fun StoreHome(browser: BrowserState, bottomPadding: androidx.compose.ui.
                 ) {
                     Icon(Ico.Refresh, null, tint = C.Carbon, modifier = Modifier.size(20.dp))
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text("Seguir donde ibas", style = Cuerpo.copy(fontWeight = FontWeight.Medium))
+                        Text(tr("Seguir donde ibas"), style = Cuerpo.copy(fontWeight = FontWeight.Medium))
                         Text(browser.title.ifBlank { browser.url }, style = Secundario.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Icon(Ico.Right, null, tint = C.Tierra, modifier = Modifier.size(16.dp))
                 }
             }
             Spacer(Modifier.height(22.dp))
-            Text("DÓNDE ENCONTRAR FLAC", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+            Text(tr("DÓNDE ENCONTRAR FLAC"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             shops.forEachIndexed { i, shop ->
                 ShopCard(shop, i) { browser.open(shop.url) }
@@ -317,11 +318,11 @@ private fun StoreHome(browser: BrowserState, bottomPadding: androidx.compose.ui.
             Spacer(Modifier.height(8.dp))
             Card {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Cómo funciona", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
-                    Text("• Las canciones se guardan en Música/Stalker.", style = Secundario)
-                    Text("• Los álbumes que vienen en .zip se descomprimen solos.", style = Secundario)
-                    Text("• Las descargas siguen aunque cambies de pantalla o cierres la app.", style = Secundario)
-                    Text("• En Bandcamp y Qobuz, al descargar elige el formato FLAC.", style = Secundario)
+                    Text(tr("Cómo funciona"), style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
+                    Text(tr("• Las canciones se guardan en Música/Stalker."), style = Secundario)
+                    Text(tr("• Los álbumes que vienen en .zip se descomprimen solos."), style = Secundario)
+                    Text(tr("• Las descargas siguen aunque cambies de pantalla o cierres la app."), style = Secundario)
+                    Text(tr("• En Bandcamp y Qobuz, al descargar elige el formato FLAC."), style = Secundario)
                 }
             }
         }
@@ -363,15 +364,15 @@ fun DownloadsSheet(onDismiss: () -> Unit) {
     }
     StalkerSheet(onDismiss) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Descargas", style = Titulo.copy(fontSize = 24.sp), modifier = Modifier.weight(1f))
+            Text(tr("Descargas"), style = Titulo.copy(fontSize = 24.sp), modifier = Modifier.weight(1f))
             if (list.any { it.status == DownloadManager.STATUS_SUCCESSFUL || it.status == DownloadManager.STATUS_FAILED }) {
                 Pill("Limpiar", selected = false) { Downloads.clearFinished(ctx) }
             }
         }
-        Text("Se guardan en Música/Stalker y aparecen solas en la biblioteca", style = Secundario)
+        Text(tr("Se guardan en Música/Stalker y aparecen solas en la biblioteca"), style = Secundario)
         Spacer(Modifier.height(12.dp))
         if (list.isEmpty()) {
-            Text("No hay descargas todavía.", style = Cuerpo.copy(color = C.Tierra), modifier = Modifier.padding(vertical = 24.dp))
+            Text(tr("No hay descargas todavía."), style = Cuerpo.copy(color = C.Tierra), modifier = Modifier.padding(vertical = 24.dp))
         } else {
             LazyColumn(Modifier.heightIn(max = 480.dp)) {
                 items(list, key = { it.id }) { d ->
@@ -387,12 +388,12 @@ fun DownloadsSheet(onDismiss: () -> Unit) {
 private fun DownloadRow(d: DownloadInfo, unzipping: Boolean, onCancel: () -> Unit) {
     val mb = { b: Long -> "%.1f MB".format(b / 1_048_576.0) }
     val status = when {
-        unzipping -> "Descomprimiendo el álbum…"
-        d.status == DownloadManager.STATUS_RUNNING -> "${(d.progress * 100).toInt()}% · ${mb(d.done)} de ${mb(d.total)}"
-        d.status == DownloadManager.STATUS_PENDING -> "En espera"
-        d.status == DownloadManager.STATUS_PAUSED -> "En pausa · esperando conexión"
-        d.status == DownloadManager.STATUS_SUCCESSFUL -> "Listo · ya está en tu biblioteca"
-        d.status == DownloadManager.STATUS_FAILED -> "Falló"
+        unzipping -> tr("Descomprimiendo el álbum…")
+        d.status == DownloadManager.STATUS_RUNNING -> tr("%s%% · %s de %s", (d.progress * 100).toInt(), mb(d.done), mb(d.total))
+        d.status == DownloadManager.STATUS_PENDING -> tr("En espera")
+        d.status == DownloadManager.STATUS_PAUSED -> tr("En pausa · esperando conexión")
+        d.status == DownloadManager.STATUS_SUCCESSFUL -> tr("Listo · ya está en tu biblioteca")
+        d.status == DownloadManager.STATUS_FAILED -> tr("Falló")
         else -> ""
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -412,7 +413,7 @@ private fun DownloadRow(d: DownloadInfo, unzipping: Boolean, onCancel: () -> Uni
             Box(
                 Modifier.padding(start = 8.dp).size(36.dp).clip(CircleShape).clickable(onClick = onCancel),
                 contentAlignment = Alignment.Center
-            ) { Icon(Ico.Close, "Cancelar", tint = C.Tierra, modifier = Modifier.size(16.dp)) }
+            ) { Icon(Ico.Close, tr("Cancelar"), tint = C.Tierra, modifier = Modifier.size(16.dp)) }
         }
     }
 }

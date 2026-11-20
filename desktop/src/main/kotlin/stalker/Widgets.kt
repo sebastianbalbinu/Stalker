@@ -103,7 +103,7 @@ fun Pill(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, activ
                 Icon(ico, if (active) C.Sombra else C.Crema, 13.dp)
                 androidx.compose.foundation.layout.Spacer(Modifier.size(7.dp))
             }
-            T(text, 12, FontWeight.Medium, if (active) C.Sombra else C.Crema)
+            T(tr(text), 12, FontWeight.Medium, if (active) C.Sombra else C.Crema)
         }
     }
 }

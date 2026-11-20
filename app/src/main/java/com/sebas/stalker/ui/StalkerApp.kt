@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sebas.stalker.tr
 import com.sebas.stalker.ArtCache
 import com.sebas.stalker.Engine
 import com.sebas.stalker.PlayerViewModel
@@ -324,7 +325,7 @@ fun MiniPlayer(t: Track, playing: Boolean, onOpen: () -> Unit, onToggle: () -> U
             Text(t.artist, style = Secundario.copy(color = Color(0xFFF0D9D2)), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onToggle), contentAlignment = Alignment.Center) {
-            Icon(if (playing) Ico.Pause else Ico.Play, if (playing) "Pausar" else "Reproducir", tint = C.SobreRojo, modifier = Modifier.size(26.dp))
+            Icon(if (playing) Ico.Pause else Ico.Play, if (playing) tr("Pausar") else tr("Reproducir"), tint = C.SobreRojo, modifier = Modifier.size(26.dp))
         }
     }
 }
@@ -332,10 +333,10 @@ fun MiniPlayer(t: Track, playing: Boolean, onOpen: () -> Unit, onToggle: () -> U
 @Composable
 fun NavBar(tab: Int, onTab: (Int) -> Unit) {
     val items = listOf(
-        Triple(0, Ico.Turntable, "Tocadiscos"),
-        Triple(1, Ico.Library, "Biblioteca"),
-        Triple(2, Ico.Sliders, "Ecualizador"),
-        Triple(3, Ico.Gear, "Sistema"),
+        Triple(0, Ico.Turntable, tr("Tocadiscos")),
+        Triple(1, Ico.Library, tr("Biblioteca")),
+        Triple(2, Ico.Sliders, tr("Ecualizador")),
+        Triple(3, Ico.Gear, tr("Sistema")),
     )
     Row(
         Modifier.fillMaxWidth().height(68.dp)
@@ -373,7 +374,7 @@ fun Pill(label: String, selected: Boolean, modifier: Modifier = Modifier, onClic
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, style = Cuerpo.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = if (selected) C.SobreRojo else C.Carbon))
+        Text(tr(label), style = Cuerpo.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = if (selected) C.SobreRojo else C.Carbon))
     }
 }
 
@@ -412,11 +413,11 @@ fun UpdateSheet(u: UpdateInfo, onDismiss: () -> Unit) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Image(painterResource(R.drawable.logo), null, Modifier.size(72.dp).clip(RoundedCornerShape(18.dp)))
             Spacer(Modifier.height(14.dp))
-            Text("Hay una versión nueva", style = Titulo.copy(fontSize = 24.sp))
+            Text(tr("Hay una versión nueva"), style = Titulo.copy(fontSize = 24.sp))
             Text("STALKER ${u.version}", style = Secundario)
             Spacer(Modifier.height(10.dp))
             Text(
-                "Se instala encima de la que tienes, sin perder tus discos ni tus favoritos.",
+                tr("Se instala encima de la que tienes, sin perder tus discos ni tus favoritos."),
                 style = Cuerpo.copy(color = C.Tierra, textAlign = TextAlign.Center)
             )
             Spacer(Modifier.height(18.dp))

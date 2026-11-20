@@ -106,13 +106,13 @@ class JamCore(private val transport: JamTransport, private val device: String) {
     private fun start(n: String, c: String, asHost: Boolean) {
         stopInternal(sendEnd = false)
         reconnecting = false
-        name = n.trim().ifBlank { "Alguien" }.take(24)
+        name = n.trim().ifBlank { tr("Alguien") }.take(24)
         code = c
         host = asHost
         ended = false
         remote = null
         synchronized(msgs) { msgs.clear() }
-        system(if (asHost) "Abriste la Jam $c. Comparte el código para que entren." else "Entrando a la Jam $c…")
+        system(if (asHost) tr("Abriste la Jam %s. Comparte el código para que entren.", c) else tr("Entrando a la Jam %s…", c))
         attempts = 0
         connect()
     }
@@ -145,7 +145,7 @@ class JamCore(private val transport: JamTransport, private val device: String) {
 
     private fun connect() {
         val gen = ++generation
-        status = if (attempts == 0) "Conectando…" else "Reconectando…"
+        status = if (attempts == 0) tr("Conectando…") else tr("Reconectando…")
         live = false
         onChange()
         transport.open(JamConfig.URL,
@@ -164,7 +164,7 @@ class JamCore(private val transport: JamTransport, private val device: String) {
         live = false
         if (code == null || ended) return
         attempts++
-        status = "Sin conexión · reintentando"
+        status = tr("Sin conexión · reintentando")
         onChange()
         val wait = minOf(30L, 1L shl minOf(attempts, 5))
         reconnecting = true
@@ -202,14 +202,14 @@ class JamCore(private val transport: JamTransport, private val device: String) {
                     if (payload.optString("status") == "ok") {
                         live = true
                         attempts = 0
-                        status = "En vivo"
+                        status = tr("En vivo")
                         send("presence", JSONObject().put("type", "presence").put("event", "track").put("payload",
                             JSONObject().put("id", myId).put("name", name).put("device", device).put("host", host)))
                         broadcast("hola", JSONObject().put("id", myId).put("name", name))
                         if (host) onHello()
                         onChange()
                     } else {
-                        status = "No se pudo entrar a la sala"
+                        status = tr("No se pudo entrar a la sala")
                         onChange()
                     }
                 }
@@ -224,10 +224,10 @@ class JamCore(private val transport: JamTransport, private val device: String) {
                 val joins = payload.optJSONObject("joins") ?: JSONObject()
                 val leaves = payload.optJSONObject("leaves") ?: JSONObject()
                 readPresence(leaves) { id, p ->
-                    if (presence.remove(id) != null && id != myId) system("${p.name} salió")
+                    if (presence.remove(id) != null && id != myId) system(tr("%s salió", p.name))
                 }
                 readPresence(joins) { id, p ->
-                    if (!presence.containsKey(id) && id != myId) system("${p.name} entró desde ${p.device}")
+                    if (!presence.containsKey(id) && id != myId) system(tr("%s entró desde %s", p.name, p.device))
                     presence[id] = p
                 }
                 updatePeers()
@@ -255,8 +255,8 @@ class JamCore(private val transport: JamTransport, private val device: String) {
                     "hola" -> if (host) onHello()
                     "fin" -> if (!host) {
                         ended = true
-                        status = "La Jam terminó"
-                        system("${p.optString("name")} cerró la Jam")
+                        status = tr("La Jam terminó")
+                        system(tr("%s cerró la Jam", p.optString("name")))
                         heartbeat?.cancel(false)
                         socket?.close()
                         socket = null
@@ -275,7 +275,7 @@ class JamCore(private val transport: JamTransport, private val device: String) {
             val metas = obj.optJSONObject(k)?.optJSONArray("metas") ?: continue
             if (metas.length() == 0) continue
             val o = metas.getJSONObject(0)
-            f(k, JamPeer(k, o.optString("name", "Alguien"), o.optString("device", ""), o.optBoolean("host")))
+            f(k, JamPeer(k, o.optString("name", tr("Alguien")), o.optString("device", ""), o.optBoolean("host")))
         }
     }
 

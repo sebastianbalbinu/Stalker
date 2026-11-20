@@ -39,7 +39,7 @@ data class Track(
     val albumKey get() = (albumArtist.ifBlank { artist } + "\u0001" + album).lowercase()
     val quality: String
         get() = when {
-            !lossless -> "$format · con pérdida"
+            !lossless -> tr("%s · con pérdida", format)
             else -> "$format · ${if (bits > 0) "$bits-bit · " else ""}${khz(rate)}"
         }
 }
@@ -119,6 +119,18 @@ object Prefs {
     var floatDisc: Boolean
         get() = p.getBoolean("floatDisc", true)
         set(v) = p.putBoolean("floatDisc", v)
+    /** Reproducción continua: al terminar un disco, entra el siguiente. */
+    var continuous: Boolean
+        get() = p.getBoolean("continuous", true)
+        set(v) = p.putBoolean("continuous", v)
+    /** Qué disco sigue: "Estantería", "Al azar" o "Mismo artista". */
+    var nextOrder: String
+        get() = p.get("nextOrder", "Estantería")
+        set(v) = p.put("nextOrder", v)
+    /** Idioma: "Sistema", "Español" o "English". */
+    var language: String
+        get() = p.get("language", "Sistema")
+        set(v) = p.put("language", v)
     var favorites: Set<String>
         get() = p.get("favorites", "").split('\n').filter { it.isNotBlank() }.toSet()
         set(v) { p.put("favorites", v.joinToString("\n").take(Preferences.MAX_VALUE_LENGTH)) }
@@ -207,8 +219,8 @@ object Library {
         Track(
             path = f.absolutePath,
             title = g(FieldKey.TITLE).ifBlank { f.nameWithoutExtension },
-            artist = g(FieldKey.ARTIST).ifBlank { "Artista desconocido" },
-            album = g(FieldKey.ALBUM).ifBlank { f.parentFile?.name ?: "Sin álbum" },
+            artist = g(FieldKey.ARTIST).ifBlank { tr("Artista desconocido") },
+            album = g(FieldKey.ALBUM).ifBlank { f.parentFile?.name ?: tr("Sin álbum") },
             albumArtist = g(FieldKey.ALBUM_ARTIST),
             trackNo = g(FieldKey.TRACK).substringBefore('/').toIntOrNull() ?: 0,
             disc = g(FieldKey.DISC_NO).substringBefore('/').toIntOrNull() ?: 1,

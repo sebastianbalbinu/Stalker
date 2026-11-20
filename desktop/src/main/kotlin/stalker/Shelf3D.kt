@@ -272,12 +272,12 @@ fun Shelf3D(app: AppState, modifier: Modifier = Modifier) {
             val inUnit = (albums.size - unit * PER_UNIT).coerceIn(0, PER_UNIT)
             Column(Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 T(
-                    (if (units > 1) "Estantería ${unit + 1} de $units  ·  " else "") + "$inUnit de $PER_UNIT discos",
+                    (if (units > 1) tr("Estantería %s de %s  ·  ", unit + 1, units) else "") + tr("%s de %s discos", inUnit, PER_UNIT),
                     11, FontWeight.Medium, C.Crema.copy(alpha = 0.8f), spacing = 0.6f,
                 )
                 if (albums.size < PER_UNIT / 3) {
                     Spacer(Modifier.height(3.dp))
-                    T("Cada FLAC que agregues encuentra su lugar aquí.", 10, color = C.Tenue)
+                    T(tr("Cada FLAC que agregues encuentra su lugar aquí."), 10, color = C.Tenue)
                 }
             }
         }
@@ -440,7 +440,7 @@ private fun Cubby(
                         drawRect(Brush.horizontalGradient(listOf(Color(0x66000000), Color(0x22000000), Color(0x66000000)), startX = x, endX = x + w),
                             Offset(x, h - recH), Size(w, recH))
                         if (l.lift[i] > 0.6f) {
-                            val tl = tm.measure("En el tocadiscos", txt(10.sp, FontWeight.SemiBold, C.Crema))
+                            val tl = tm.measure(tr("En el tocadiscos"), txt(10.sp, FontWeight.SemiBold, C.Crema))
                             val bx = (x + w / 2 - tl.size.width / 2f - 8f).coerceIn(2f, size.width - tl.size.width - 18f)
                             drawRoundRect(Color(0xF0140D0B), Offset(bx, h * 0.38f), Size(tl.size.width + 16f, tl.size.height + 10f), CornerRadius(8f))
                             drawRect(C.Rojo, Offset(bx, h * 0.38f + 4f), Size(2.5f, tl.size.height + 2f))
@@ -590,7 +590,7 @@ private fun Display(a: Album, playing: Boolean, cabW: Float, modifier: Modifier,
             // labio dorado que sostiene la funda
             drawRect(Brush.verticalGradient(listOf(Color(0xFFE9C987), Color(0xFF8A6A33))), Offset(w * 0.08f, ledgeY - h * 0.035f), Size(w * 0.70f, h * 0.035f))
             // plaquita
-            val label = if (playing) "SONANDO" else "RECIÉN LLEGADO"
+            val label = if (playing) tr("SONANDO") else tr("RECIÉN LLEGADO")
             val tl = tm.measure(label, txt((h * 0.045f / density).coerceAtLeast(7f).sp, FontWeight.SemiBold, Color(0xFF2A1A0A), (h * 0.006f / density).sp))
             val pw = tl.size.width + h * 0.08f
             val px = w * 0.43f - pw / 2
@@ -694,7 +694,7 @@ private fun PulledOut(app: AppState, p: Pulled, modifier: Modifier, onClose: () 
                 Spacer(Modifier.height(6.dp))
                 T(a.title, 28, FontWeight.SemiBold, maxLines = 3)
                 Spacer(Modifier.height(8.dp))
-                T(listOfNotNull(a.year.ifBlank { null }, "${a.tracks.size} canciones", fmtLong(a.durationMs)).joinToString("  ·  "), 12, color = C.Tenue)
+                T(listOfNotNull(a.year.ifBlank { null }, tr("%s canciones", a.tracks.size), fmtLong(a.durationMs)).joinToString("  ·  "), 12, color = C.Tenue)
                 Spacer(Modifier.height(4.dp))
                 T(a.tracks.first().quality, 11, color = if (a.hiRes) C.Oro else C.Apagado)
                 Spacer(Modifier.height(22.dp))
@@ -704,7 +704,7 @@ private fun PulledOut(app: AppState, p: Pulled, modifier: Modifier, onClose: () 
                 }
                 Spacer(Modifier.height(10.dp))
                 val fav = a.key in app.favorites
-                Pill(if (fav) "En favoritos" else "Agregar a favoritos", { app.toggleFavorite(a.key) }, ico = if (fav) Ico.HeartOn else Ico.Heart)
+                Pill(if (fav) tr("En favoritos") else tr("Agregar a favoritos"), { app.toggleFavorite(a.key) }, ico = if (fav) Ico.HeartOn else Ico.Heart)
                 Spacer(Modifier.height(18.dp))
                 a.tracks.take(8).forEachIndexed { i, t ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
@@ -713,7 +713,7 @@ private fun PulledOut(app: AppState, p: Pulled, modifier: Modifier, onClose: () 
                         T(fmt(t.durationMs), 11, color = C.Apagado)
                     }
                 }
-                if (a.tracks.size > 8) T("y ${a.tracks.size - 8} más…", 10, color = C.Apagado)
+                if (a.tracks.size > 8) T(tr("y %s más…", a.tracks.size - 8), 10, color = C.Apagado)
             }
         }
     }
