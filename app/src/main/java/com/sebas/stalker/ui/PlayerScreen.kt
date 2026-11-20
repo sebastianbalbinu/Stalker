@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
+import com.sebas.stalker.tr
 import com.sebas.stalker.Engine
 import com.sebas.stalker.PlayerViewModel
 import com.sebas.stalker.R
@@ -119,13 +120,13 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            SoftButton(Ico.Down, "Volver a la biblioteca", onClick = onClose)
+            SoftButton(Ico.Down, tr("Volver a la biblioteca"), onClick = onClose)
             Spacer(Modifier.width(10.dp))
-            SoftButton(Ico.Moon, "Temporizador", tint = if (sleepAt != null || sleepEnd) C.Rojo else C.Carbon) { showTimer = true }
+            SoftButton(Ico.Moon, tr("Temporizador"), tint = if (sleepAt != null || sleepEnd) C.Rojo else C.Carbon) { showTimer = true }
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Wordmark() }
-            SoftButton(Ico.Lyrics, "Letra") { showLyrics = true }
+            SoftButton(Ico.Lyrics, tr("Letra")) { showLyrics = true }
             Spacer(Modifier.width(10.dp))
-            SoftButton(Ico.ListIco, "Pistas del disco") { if (queue.isNotEmpty()) showQueue = true }
+            SoftButton(Ico.ListIco, tr("Pistas del disco")) { if (queue.isNotEmpty()) showQueue = true }
         }
 
         // El vinilo ocupa el espacio que sobre, sin empujar nada.
@@ -170,7 +171,7 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
             ) {
                 Icon(Ico.Refresh, null, tint = C.SobreRojo, modifier = Modifier.size(20.dp))
                 Text(
-                    "Terminó el Lado A · toca para darle vuelta al disco",
+                    tr("Terminó el Lado A · toca para darle vuelta al disco"),
                     style = Cuerpo.copy(color = C.SobreRojo, fontWeight = FontWeight.Medium, fontSize = 14.sp),
                     modifier = Modifier.padding(start = 12.dp)
                 )
@@ -180,16 +181,16 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
         val t = track
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
-                t?.title ?: "Nada sonando",
+                t?.title ?: tr("Nada sonando"),
                 style = Titulo.copy(fontSize = 30.sp, lineHeight = 34.sp),
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
-            Text(t?.artist ?: "Elige un disco en tu biblioteca", style = Cuerpo.copy(fontSize = 16.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(t?.artist ?: tr("Elige un disco en tu biblioteca"), style = Cuerpo.copy(fontSize = 16.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (t != null && queue.isNotEmpty()) {
-                val side = if (index < (queue.size + 1) / 2) "Lado A" else "Lado B"
-                val name = queueTitle ?: t.album
+                val side = if (index < (queue.size + 1) / 2) tr("Lado A") else tr("Lado B")
+                val name = queueTitle?.let { Engine.displayTitle(it) } ?: t.album
                 Text(
-                    "$name · $side · ${index + 1} de ${queue.size}",
+                    tr("%s · %s · %s de %s", name, side, index + 1, queue.size),
                     style = Secundario.copy(fontSize = 14.sp), maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
             }
@@ -198,8 +199,8 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
         ProgressBar(pos, dur, enabled = t != null) { vm.seek(it) }
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            SoftButton(Ico.Shuffle, "Aleatorio", size = 48.dp, tint = if (shuffle) C.Rojo else C.Carbon) { vm.toggleShuffle() }
-            SoftButton(Ico.Prev, "Anterior", size = 58.dp) { vm.previous() }
+            SoftButton(Ico.Shuffle, tr("Aleatorio"), size = 48.dp, tint = if (shuffle) C.Rojo else C.Carbon) { vm.toggleShuffle() }
+            SoftButton(Ico.Prev, tr("Anterior"), size = 58.dp) { vm.previous() }
             Box(
                 Modifier.size(78.dp)
                     .shadow(10.dp, CircleShape, spotColor = C.Rojo)
@@ -211,11 +212,11 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(if (playing) Ico.Pause else Ico.Play, if (playing) "Pausar" else "Reproducir", tint = C.SobreRojo, modifier = Modifier.size(30.dp))
+                Icon(if (playing) Ico.Pause else Ico.Play, if (playing) tr("Pausar") else tr("Reproducir"), tint = C.SobreRojo, modifier = Modifier.size(30.dp))
             }
-            SoftButton(Ico.Next, "Siguiente", size = 58.dp) { vm.next() }
+            SoftButton(Ico.Next, tr("Siguiente"), size = 58.dp) { vm.next() }
             SoftButton(
-                if (repeat == Player.REPEAT_MODE_ONE) Ico.RepeatOne else Ico.Repeat, "Repetir", size = 48.dp,
+                if (repeat == Player.REPEAT_MODE_ONE) Ico.RepeatOne else Ico.Repeat, tr("Repetir"), size = 48.dp,
                 tint = if (repeat == Player.REPEAT_MODE_OFF) C.Carbon else C.Rojo
             ) { vm.cycleRepeat() }
         }
@@ -239,7 +240,7 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        "El audio se comprime: no estás escuchando FLAC. Conecta tus audífonos por USB-C para la calidad completa.",
+                        tr("El audio se comprime: no estás escuchando FLAC. Conecta tus audífonos por USB-C para la calidad completa."),
                         style = Secundario.copy(fontSize = 11.sp, lineHeight = 14.sp), maxLines = 2, overflow = TextOverflow.Ellipsis
                     )
                 } else {
@@ -259,7 +260,7 @@ fun PlayerScreen(vm: PlayerViewModel, onClose: () -> Unit) {
     }
 
     if (showQueue) {
-        QueueSheet(queueTitle, queue, index, onPick = { vm.jumpTo(it) }, onRemove = { vm.removeFromQueue(it) }, onMove = { f, t -> vm.moveInQueue(f, t) }, onDismiss = { showQueue = false })
+        QueueSheet(queueTitle?.let { Engine.displayTitle(it) }, queue, index, onPick = { vm.jumpTo(it) }, onRemove = { vm.removeFromQueue(it) }, onMove = { f, t -> vm.moveInQueue(f, t) }, onDismiss = { showQueue = false })
     }
     if (showTimer) TimerSheet { showTimer = false }
     if (showJam) JamSheet { showJam = false }

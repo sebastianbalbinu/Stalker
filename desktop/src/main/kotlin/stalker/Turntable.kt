@@ -573,7 +573,7 @@ private fun DrawScope.drawLoupe(tm: TextMeasurer, queue: List<Track>, s: Spot, a
     val t = queue.getOrNull(s.track) ?: return
     val title = tm.measure("${s.track + 1}. ${t.title}".take(46), txt((w * 0.0145f / density).coerceAtLeast(11f).sp, FontWeight.SemiBold, C.Crema))
     val sub = tm.measure(
-        (if (s.snapped) "Inicio de la canción" else fmt(s.ms) + " / " + fmt(t.durationMs)) + if (dragging) "  ·  suelta para bajar la aguja" else "  ·  clic para bajar la aguja",
+        (if (s.snapped) tr("Inicio de la canción") else fmt(s.ms) + " / " + fmt(t.durationMs)) + if (dragging) tr("  ·  suelta para bajar la aguja") else tr("  ·  clic para bajar la aguja"),
         txt((w * 0.0118f / density).coerceAtLeast(9.5f).sp, FontWeight.Medium, C.Tenue),
     )
     val pad = w * 0.012f

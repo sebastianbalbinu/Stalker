@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sebas.stalker.tr
 import com.sebas.stalker.Engine
 import com.sebas.stalker.OutputMode
 
@@ -42,7 +43,7 @@ fun EqScreen() {
 
     CurtainSheet {
       Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 120.dp)) {
-        ScreenHeader("Ecualizador", trailing = {
+        ScreenHeader(tr("Ecualizador"), trailing = {
             Switch(
                 checked = on,
                 onCheckedChange = { Engine.setEq(it) },
@@ -58,10 +59,10 @@ fun EqScreen() {
         Spacer(Modifier.height(8.dp))
         Text(
             when {
-                blocked -> "En modo Bit-perfect el ecualizador se apaga para no tocar la señal. Cámbialo a Hi-Res en Sistema para usarlo."
-                !available -> "Este teléfono no permite ecualizador en esta salida."
-                on -> "Activo · preset $preset"
-                else -> "Apagado · la señal pasa sin cambios"
+                blocked -> tr("En modo Bit-perfect el ecualizador se apaga para no tocar la señal. Cámbialo a Hi-Res en Sistema para usarlo.")
+                !available -> tr("Este teléfono no permite ecualizador en esta salida.")
+                on -> tr("Activo · preset %s", tr(preset))
+                else -> tr("Apagado · la señal pasa sin cambios")
             },
             style = Secundario.copy(textAlign = TextAlign.Center),
             modifier = Modifier.fillMaxWidth()
@@ -98,7 +99,7 @@ fun EqScreen() {
         }
 
         Spacer(Modifier.height(26.dp))
-        Text("PRESETS", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+        Text(tr("PRESETS"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(10.dp))
         Engine.presets.keys.toList().chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -93,7 +93,7 @@ object Sharing {
                 }
 
                 tracks.forEachIndexed { i, t ->
-                    working.value = "Preparando el disco · ${i + 1} de ${tracks.size}"
+                    working.value = tr("Preparando el disco · %s de %s", i + 1, tracks.size)
                     ctx.contentResolver.openInputStream(t.uri)?.use { input ->
                         zip.putNextEntry(ZipEntry(files[i]))
                         input.copyTo(zip, 1 shl 16)
@@ -114,10 +114,10 @@ object Sharing {
             Intent(Intent.ACTION_SEND)
                 .setType("application/zip")
                 .putExtra(Intent.EXTRA_STREAM, uri)
-                .putExtra(Intent.EXTRA_SUBJECT, "Disco: $name")
-                .putExtra(Intent.EXTRA_TEXT, "Te comparto el disco «$name». Ábrelo con Stalker para tenerlo en tu biblioteca.")
+                .putExtra(Intent.EXTRA_SUBJECT, tr("Disco: %s", name))
+                .putExtra(Intent.EXTRA_TEXT, tr("Te comparto el disco «%s». Ábrelo con Stalker para tenerlo en tu biblioteca.", name))
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
-            "Compartir disco"
+            tr("Compartir disco")
         )
 
     private fun displayName(ctx: Context, uri: Uri): String? = try {
@@ -163,14 +163,14 @@ object Sharing {
 
     /** Abre un disco compartido (o cualquier .zip con música) y lo agrega como "Mi disco". */
     suspend fun importDisc(ctx: Context, uri: Uri): String = withContext(Dispatchers.IO) {
-        val zipName = displayName(ctx, uri)?.removeSuffix(".zip")?.removeSuffix(".stalker") ?: "Disco compartido"
+        val zipName = displayName(ctx, uri)?.removeSuffix(".zip")?.removeSuffix(".stalker") ?: tr("Disco compartido")
         var discName = zipName
         var order: List<String> = emptyList()
         val ids = HashMap<String, Long>()
         var count = 0
         try {
-            working.value = "Abriendo el disco…"
-            val input = ctx.contentResolver.openInputStream(uri) ?: return@withContext "No se pudo abrir el archivo"
+            working.value = tr("Abriendo el disco…")
+            val input = ctx.contentResolver.openInputStream(uri) ?: return@withContext tr("No se pudo abrir el archivo")
             ZipInputStream(input.buffered(1 shl 16)).use { zip ->
                 while (true) {
                     val entry = zip.nextEntry ?: break
@@ -185,17 +185,17 @@ object Sharing {
                     }
                     if (!Downloads.isAudio(base) || base.startsWith("._")) continue
                     count++
-                    working.value = "Guardando canciones · $count"
+                    working.value = tr("Guardando canciones · %s", count)
                     insertAudio(ctx, clean(discName), clean(base), zip)?.let { ids[base] = it }
                 }
             }
-            if (count == 0) return@withContext "Ese archivo no trae canciones"
+            if (count == 0) return@withContext tr("Ese archivo no trae canciones")
             val ordered = if (order.isNotEmpty()) order.mapNotNull { ids[it] } + ids.filterKeys { it !in order }.values
             else ids.entries.sortedBy { it.key }.map { it.value }
             if (ordered.isNotEmpty()) Engine.createDisco(discName, ordered)
-            "Disco «$discName» agregado con $count canciones"
+            tr("Disco «%s» agregado con %s canciones", discName, count)
         } catch (e: Exception) {
-            if (count > 0) "Se guardaron $count canciones, pero el archivo venía incompleto" else "Ese archivo no es un disco válido"
+            if (count > 0) tr("Se guardaron %s canciones, pero el archivo venía incompleto", count) else tr("Ese archivo no es un disco válido")
         } finally {
             working.value = null
         }

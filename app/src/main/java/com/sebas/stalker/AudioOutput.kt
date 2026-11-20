@@ -68,21 +68,21 @@ class AudioOutput(context: Context) {
         val dev = usbDevice()
         Engine.usbDevice.value = dev?.productName?.toString()
         if (Engine.route.value == "bluetooth") {
-            Engine.outputStatus.value = "Bluetooth · el audio se comprime, no llega en calidad FLAC"
+            Engine.outputStatus.value = tr("Bluetooth · el audio se comprime, no llega en calidad FLAC")
             return
         }
         if (dev == null) {
-            Engine.outputStatus.value = "Sin DAC USB · salida del teléfono"
+            Engine.outputStatus.value = tr("Sin DAC USB · salida del teléfono")
             return
         }
         if (Build.VERSION.SDK_INT < 34) {
-            Engine.outputStatus.value = "USB conectado · Hi-Res requiere Android 14"
+            Engine.outputStatus.value = tr("USB conectado · Hi-Res requiere Android 14")
             return
         }
         try {
             applyApi34(dev, mode, info)
         } catch (e: Exception) {
-            Engine.outputStatus.value = "USB conectado · no se pudo configurar (${e.javaClass.simpleName})"
+            Engine.outputStatus.value = tr("USB conectado · no se pudo configurar (%s)", e.javaClass.simpleName)
         }
     }
 
@@ -106,11 +106,11 @@ class AudioOutput(context: Context) {
         val attrs = mediaAttributes()
         if (mode == OutputMode.NORMAL) {
             am.clearPreferredMixerAttributes(attrs, dev)
-            Engine.outputStatus.value = "Normal · mezclador de Android"
+            Engine.outputStatus.value = tr("Normal · mezclador de Android")
             return
         }
         if (info == null) {
-            Engine.outputStatus.value = "USB listo · esperando canción"
+            Engine.outputStatus.value = tr("USB listo · esperando canción")
             return
         }
         val supported = am.getSupportedMixerAttributes(dev)
@@ -122,7 +122,7 @@ class AudioOutput(context: Context) {
             val pick = bit.firstOrNull { it.format.encoding == AudioFormat.ENCODING_PCM_FLOAT }
                 ?: bit.firstOrNull()
             if (pick != null && am.setPreferredMixerAttributes(attrs, dev, pick)) {
-                Engine.outputStatus.value = "Bit-perfect · ${khz(info.sampleRate)} kHz al DAC"
+                Engine.outputStatus.value = tr("Bit-perfect · %s kHz al DAC", khz(info.sampleRate))
                 return
             }
         }
@@ -131,13 +131,13 @@ class AudioOutput(context: Context) {
         val pickHi = hi.maxByOrNull { encodingRank(it.format.encoding) }
         if (pickHi != null && am.setPreferredMixerAttributes(attrs, dev, pickHi)) {
             Engine.outputStatus.value = if (mode == OutputMode.BIT_PERFECT) {
-                "Tu teléfono no ofrece bit-perfect · Hi-Res ${khz(info.sampleRate)} kHz sin remuestreo"
+                tr("Tu teléfono no ofrece bit-perfect · Hi-Res %s kHz sin remuestreo", khz(info.sampleRate))
             } else {
-                "Hi-Res · ${khz(info.sampleRate)} kHz sin remuestreo"
+                tr("Hi-Res · %s kHz sin remuestreo", khz(info.sampleRate))
             }
         } else {
             am.clearPreferredMixerAttributes(attrs, dev)
-            Engine.outputStatus.value = "El DAC no acepta ${khz(info.sampleRate)} kHz · salida normal"
+            Engine.outputStatus.value = tr("El DAC no acepta %s kHz · salida normal", khz(info.sampleRate))
         }
     }
 

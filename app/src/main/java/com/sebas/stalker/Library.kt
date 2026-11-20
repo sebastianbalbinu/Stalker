@@ -73,9 +73,9 @@ object Library {
                         Track(
                             id = id,
                             uri = ContentUris.withAppendedId(collection, id),
-                            title = c.getString(iTitle) ?: "Sin título",
-                            artist = if (artist.isNullOrBlank() || artist == "<unknown>") "Artista desconocido" else artist,
-                            album = c.getString(iAlbum) ?: "Sin álbum",
+                            title = c.getString(iTitle) ?: tr("Sin título"),
+                            artist = if (artist.isNullOrBlank() || artist == "<unknown>") tr("Artista desconocido") else artist,
+                            album = c.getString(iAlbum) ?: tr("Sin álbum"),
                             albumId = c.getLong(iAlbumId),
                             trackNo = c.getInt(iTrack) % 1000,
                             durationMs = dur,

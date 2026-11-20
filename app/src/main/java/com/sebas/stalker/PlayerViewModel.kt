@@ -128,7 +128,24 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun next() { controller?.seekToNextMediaItem() }
+    fun next() {
+        val c = controller ?: return
+        // En la última canción, "siguiente" pasa al siguiente disco (si la reproducción continua está activa).
+        if (!c.hasNextMediaItem() && c.repeatMode == Player.REPEAT_MODE_OFF && !(Jam.core.active && !Jam.core.host)) {
+            val ids = queue.value.map { it.id }
+            Engine.nextDisc(ids, Engine.queueTitle.value)?.let { (tracks, title) ->
+                if (tracks.isNotEmpty()) { playList(tracks, 0, title); return }
+            }
+        }
+        c.seekToNextMediaItem()
+    }
+
+    /** Rocola: toda la biblioteca (o solo los favoritos) al azar. */
+    fun rocola(onlyFavorites: Boolean) {
+        val list = Engine.rocola(onlyFavorites)
+        if (list.isEmpty()) return
+        playList(list, 0, if (onlyFavorites) Engine.ROCOLA_FAVS else Engine.ROCOLA)
+    }
 
     fun previous() {
         val c = controller ?: return
@@ -143,7 +160,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (tracks.isEmpty()) return
         val items = tracks.map { Engine.mediaItem(it) }
         if (c.mediaItemCount == 0) {
-            playList(tracks, 0, "Cola")
+            playList(tracks, 0, tr("Cola"))
         } else {
             c.addMediaItems(c.currentMediaItemIndex + 1, items)
         }
@@ -153,7 +170,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun addToQueue(tracks: List<Track>) {
         val c = controller ?: return
         if (tracks.isEmpty()) return
-        if (c.mediaItemCount == 0) playList(tracks, 0, "Cola")
+        if (c.mediaItemCount == 0) playList(tracks, 0, tr("Cola"))
         else c.addMediaItems(tracks.map { Engine.mediaItem(it) })
     }
 
@@ -188,7 +205,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         jamIdx = idx; jamPlaying = c.isPlaying; jamPos = pos; jamAt = now; jamQueue = ids
         Jam.core.publish(
             JamState(
-                Engine.queueTitle.value ?: q.getOrNull(idx)?.album ?: "Disco",
+                Engine.queueTitle.value?.let { Engine.displayTitle(it) } ?: q.getOrNull(idx)?.album ?: tr("Disco"),
                 q.map { JamTrack(it.title, it.artist, it.album, it.durationMs) },
                 idx, pos, c.isPlaying,
             )

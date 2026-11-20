@@ -39,7 +39,7 @@ object Audio {
             val l = Native.load("stalker_audio", SA::class.java)
             if (l.sa_init() == 1) l else null
         } catch (t: Throwable) {
-            System.err.println("Motor de audio no disponible: $t")
+            System.err.println(tr("Motor de audio no disponible: %s", t))
             null
         }
     }

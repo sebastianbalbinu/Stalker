@@ -31,7 +31,7 @@ object Updates {
         val prefs = ctx.getSharedPreferences("stalker", Context.MODE_PRIVATE)
         val last = prefs.getLong("updateCheck", 0L)
         if (!force && System.currentTimeMillis() - last < 6 * 3_600_000L) return@withContext
-        status.value = "Buscando…"
+        status.value = tr("Buscando…")
         if (force) dismissed.value = false
         try {
             val conn = URL(API).openConnection() as HttpURLConnection
@@ -54,13 +54,13 @@ object Updates {
             }
             if (code > currentCode(ctx)) {
                 available.value = UpdateInfo(tag, code, url, o.optString("body"))
-                status.value = "Hay una versión nueva: $tag"
+                status.value = tr("Hay una versión nueva: %s", tag)
             } else {
                 available.value = null
-                status.value = "Tienes la última versión"
+                status.value = tr("Tienes la última versión")
             }
         } catch (e: Exception) {
-            status.value = "No se pudo revisar (¿sin internet?)"
+            status.value = tr("No se pudo revisar (¿sin internet?)")
         }
     }
 }

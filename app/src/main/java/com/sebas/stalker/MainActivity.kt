@@ -50,9 +50,9 @@ class MainActivity : ComponentActivity() {
         if (uri == null) return@registerForActivityResult
         try {
             contentResolver.openOutputStream(uri)?.use { it.write(Engine.exportJson().toByteArray()) }
-            toast("Respaldo guardado")
+            toast(tr("Respaldo guardado"))
         } catch (e: Exception) {
-            toast("No se pudo guardar el respaldo")
+            toast(tr("No se pudo guardar el respaldo"))
         }
     }
 
@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
             val text = contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: return@registerForActivityResult
             toast(Engine.importJson(text))
         } catch (e: Exception) {
-            toast("Ese archivo no es un respaldo de Stalker")
+            toast(tr("Ese archivo no es un respaldo de Stalker"))
         }
     }
 
@@ -141,6 +141,9 @@ class MainActivity : ComponentActivity() {
                 else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
             }
+            // Al cambiar de idioma se redibuja toda la interfaz.
+            val language by I18n.choice.collectAsState()
+            androidx.compose.runtime.key(language) {
             StalkerApp(
                 vm = vm,
                 hasPermission = hasPermission.value,
@@ -152,6 +155,7 @@ class MainActivity : ComponentActivity() {
                 onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                 onImportDisc = { discLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
             )
+            }
         }
     }
 }

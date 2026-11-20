@@ -55,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sebas.stalker.tr
 import com.sebas.stalker.Album
 import com.sebas.stalker.Disco
 import com.sebas.stalker.Engine
@@ -122,15 +123,15 @@ fun LibraryScreen(
 
     CurtainSheet {
         ScreenHeader(
-            "Biblioteca",
+            tr("Biblioteca"),
             leading = {
-                SoftButton(if (searching) Ico.Close else Ico.Search, if (searching) "Cerrar búsqueda" else "Buscar") {
+                SoftButton(if (searching) Ico.Close else Ico.Search, if (searching) tr("Cerrar búsqueda") else tr("Buscar")) {
                     searching = !searching
                     if (!searching) query = ""
                 }
             },
             trailing = {
-                SoftButton(if (discView) Ico.Library else Ico.Disc, if (discView) "Ver portadas" else "Ver como discos") {
+                SoftButton(if (discView) Ico.Library else Ico.Disc, if (discView) tr("Ver portadas") else tr("Ver como discos")) {
                     Engine.setLibraryView(if (discView) "Portadas" else "Discos")
                 }
             },
@@ -142,7 +143,7 @@ fun LibraryScreen(
                 onValueChange = { query = it },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Canción, artista o álbum", style = Cuerpo.copy(color = C.Piedra)) },
+                placeholder = { Text(tr("Canción, artista o álbum"), style = Cuerpo.copy(color = C.Piedra)) },
                 leadingIcon = { Icon(Ico.Search, null, tint = C.Tierra, modifier = Modifier.size(20.dp)) },
                 textStyle = Cuerpo,
                 shape = RoundedCornerShape(22.dp),
@@ -170,23 +171,23 @@ fun LibraryScreen(
         Box(Modifier.fillMaxSize()) {
             when {
                 !hasPermission -> EmptyHint(
-                    "Necesito permiso",
-                    "Stalker lee la música guardada en tu teléfono.",
-                    "Dar permiso", onRequestPermission
+                    tr("Necesito permiso"),
+                    tr("Stalker lee la música guardada en tu teléfono."),
+                    tr("Dar permiso"), onRequestPermission
                 )
                 scanned && all.isEmpty() -> EmptyHint(
-                    "Sin música aún",
-                    "Copia tus FLAC a la carpeta Música del teléfono y toca actualizar.",
-                    "Actualizar"
+                    tr("Sin música aún"),
+                    tr("Copia tus FLAC a la carpeta Música del teléfono y toca actualizar."),
+                    tr("Actualizar")
                 ) { vm.rescan() }
 
                 tab == "Álbumes" || tab == "Favoritos" -> {
                     val list = if (tab == "Álbumes") shownAlbums else shownFavs
                     if (list.isEmpty()) {
                         EmptyHint(
-                            if (tab == "Favoritos") "Sin favoritos" else "Nada por aquí",
-                            if (tab == "Favoritos") "Mantén presionado un álbum, o toca el corazón dentro de él, para guardarlo aquí."
-                            else "No hay álbumes que coincidan."
+                            if (tab == "Favoritos") tr("Sin favoritos") else tr("Nada por aquí"),
+                            if (tab == "Favoritos") tr("Mantén presionado un álbum, o toca el corazón dentro de él, para guardarlo aquí.")
+                            else tr("No hay álbumes que coincidan.")
                         )
                     } else {
                         LazyVerticalGrid(
@@ -195,6 +196,16 @@ fun LibraryScreen(
                             verticalArrangement = Arrangement.spacedBy(20.dp),
                             contentPadding = PaddingValues(bottom = bottom),
                         ) {
+                            if (query.isBlank()) {
+                                item(span = { GridItemSpan(2) }, key = "rocola") {
+                                    val favTab = tab == "Favoritos"
+                                    RocolaButton(
+                                        if (favTab) tr("Favoritos al azar") else tr("Rocola · todo al azar"),
+                                        if (favTab) tr("Todas las canciones de tus álbumes favoritos, mezcladas")
+                                        else tr("Toda tu biblioteca mezclada, sin repetir"),
+                                    ) { vm.rocola(onlyFavorites = favTab) }
+                                }
+                            }
                             if (tab == "Álbumes" && query.isBlank() && recent.isNotEmpty()) {
                                 item(span = { GridItemSpan(2) }, key = "recientes") {
                                     RecentRow(recent, discView) { onOpen(Detail.OfAlbum(it.id)) }
@@ -234,7 +245,7 @@ fun LibraryScreen(
                         SleeveCard(
                             cover = dt.firstOrNull(),
                             title = d.name,
-                            subtitle = if (dt.size == 1) "1 canción" else "${dt.size} canciones",
+                            subtitle = if (dt.size == 1) tr("1 canción") else tr("%s canciones", dt.size),
                             onClick = { onOpen(Detail.OfDisco(d.id)) },
                             onLong = null,
                             fast = playing && Engine.queueTitle.value == d.name,
@@ -246,14 +257,14 @@ fun LibraryScreen(
                 tab == "Recibidos" -> LazyColumn(contentPadding = PaddingValues(bottom = bottom)) {
                     item {
                         Text(
-                            "Canciones que te mandaron por WhatsApp o Telegram. Las notas de voz nunca aparecen aquí.",
+                            tr("Canciones que te mandaron por WhatsApp o Telegram. Las notas de voz nunca aparecen aquí."),
                             style = Secundario.copy(fontSize = 12.sp), modifier = Modifier.padding(bottom = 8.dp)
                         )
                     }
                     itemsIndexed(shownReceived, key = { _, t -> "rc" + t.id }) { i, t ->
                         SongRow(
                             t, playing = current?.id == t.id, disc = discView,
-                            onClick = { vm.playList(shownReceived, i, "Recibidos") },
+                            onClick = { vm.playList(shownReceived, i, tr("Recibidos")) },
                             onLong = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); songMenu = t },
                         )
                     }
@@ -263,7 +274,7 @@ fun LibraryScreen(
                     itemsIndexed(shownSongs, key = { _, t -> t.id }) { i, t ->
                         SongRow(
                             t, playing = current?.id == t.id, disc = discView,
-                            onClick = { vm.playList(shownSongs, i, "Canciones") },
+                            onClick = { vm.playList(shownSongs, i, tr("Canciones")) },
                             onLong = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); songMenu = t },
                         )
                     }
@@ -277,11 +288,11 @@ fun LibraryScreen(
         ActionSheet(
             a.title, a.artist,
             listOf(
-                SheetAction("Reproducir después", Ico.PlayNext) { vm.playNext(a.tracks) },
-                SheetAction("Añadir a la cola", Ico.QueueAdd) { vm.addToQueue(a.tracks) },
-                SheetAction(if (fav) "Quitar de favoritos" else "Añadir a favoritos", if (fav) Ico.HeartFull else Ico.Heart) { Engine.toggleFavorite(a.id) },
-                SheetAction("Añadir a un disco", Ico.Disc) { addToDisco = a.tracks.map { it.id } },
-                SheetAction("Ocultar de la biblioteca", Ico.Hide, destructive = true) { Engine.hideAlbum(a.id) },
+                SheetAction(tr("Reproducir después"), Ico.PlayNext) { vm.playNext(a.tracks) },
+                SheetAction(tr("Añadir a la cola"), Ico.QueueAdd) { vm.addToQueue(a.tracks) },
+                SheetAction(if (fav) tr("Quitar de favoritos") else tr("Añadir a favoritos"), if (fav) Ico.HeartFull else Ico.Heart) { Engine.toggleFavorite(a.id) },
+                SheetAction(tr("Añadir a un disco"), Ico.Disc) { addToDisco = a.tracks.map { it.id } },
+                SheetAction(tr("Ocultar de la biblioteca"), Ico.Hide, destructive = true) { Engine.hideAlbum(a.id) },
             ),
             onDismiss = { albumMenu = null }
         )
@@ -290,21 +301,40 @@ fun LibraryScreen(
         ActionSheet(
             t.title, t.artist,
             listOf(
-                SheetAction("Reproducir después", Ico.PlayNext) { vm.playNext(listOf(t)) },
-                SheetAction("Añadir a la cola", Ico.QueueAdd) { vm.addToQueue(listOf(t)) },
-                SheetAction("Añadir a un disco", Ico.Disc) { addToDisco = listOf(t.id) },
-                SheetAction("Ocultar canción", Ico.Hide, destructive = true) { Engine.hideTrack(t.id) },
+                SheetAction(tr("Reproducir después"), Ico.PlayNext) { vm.playNext(listOf(t)) },
+                SheetAction(tr("Añadir a la cola"), Ico.QueueAdd) { vm.addToQueue(listOf(t)) },
+                SheetAction(tr("Añadir a un disco"), Ico.Disc) { addToDisco = listOf(t.id) },
+                SheetAction(tr("Ocultar canción"), Ico.Hide, destructive = true) { Engine.hideTrack(t.id) },
             ),
             onDismiss = { songMenu = null }
         )
     }
     addToDisco?.let { ids -> AddToDiscoSheet(ids) { addToDisco = null } }
     if (naming) {
-        NameDialog("Nuevo disco", "", "Crear", onDismiss = { naming = false }) { name ->
+        NameDialog(tr("Nuevo disco"), "", tr("Crear"), onDismiss = { naming = false }) { name ->
             val d = Engine.createDisco(name)
             onOpen(Detail.OfDisco(d.id))
             onOpen(Detail.PickSongs(d.id))
         }
+    }
+}
+
+/** Rocola: un botón ancho sobre la estantería para escuchar todo al azar. */
+@Composable
+fun RocolaButton(title: String, sub: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Tarjeta)
+            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(40.dp).clip(CircleShape).background(C.Rojo), contentAlignment = Alignment.Center) {
+            Icon(Ico.Shuffle, null, tint = C.SobreRojo, modifier = Modifier.size(20.dp))
+        }
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(title, style = Cuerpo.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(sub, style = Secundario.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Icon(Ico.Play, null, tint = C.Rojo, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -324,7 +354,7 @@ fun AlbumCard(a: Album, favorite: Boolean, onClick: () -> Unit, onLong: () -> Un
                 Box(
                     Modifier.align(Alignment.TopEnd).padding(8.dp).size(28.dp).clip(CircleShape).background(C.Marfil),
                     contentAlignment = Alignment.Center
-                ) { Icon(Ico.HeartFull, "Favorito", tint = C.Rojo, modifier = Modifier.size(16.dp)) }
+                ) { Icon(Ico.HeartFull, tr("Favorito"), tint = C.Rojo, modifier = Modifier.size(16.dp)) }
             }
         }
         Column {
@@ -378,13 +408,13 @@ fun Sleeve(cover: Track?, modifier: Modifier, fast: Boolean = false, favorite: B
                 Box(
                     Modifier.align(Alignment.BottomStart).padding(6.dp).clip(RoundedCornerShape(6.dp))
                         .background(C.Rojo).padding(horizontal = 6.dp, vertical = 2.dp)
-                ) { Text("MI DISCO", style = Cuerpo.copy(fontSize = 9.sp, letterSpacing = 1.sp, color = C.SobreRojo, fontWeight = FontWeight.SemiBold)) }
+                ) { Text(tr("MI DISCO"), style = Cuerpo.copy(fontSize = 9.sp, letterSpacing = 1.sp, color = C.SobreRojo, fontWeight = FontWeight.SemiBold)) }
             }
             if (favorite) {
                 Box(
                     Modifier.align(Alignment.TopEnd).padding(6.dp).size(24.dp).clip(CircleShape).background(C.Marfil),
                     contentAlignment = Alignment.Center
-                ) { Icon(Ico.HeartFull, "Favorito", tint = C.Rojo, modifier = Modifier.size(14.dp)) }
+                ) { Icon(Ico.HeartFull, tr("Favorito"), tint = C.Rojo, modifier = Modifier.size(14.dp)) }
             }
         }
     }
@@ -403,8 +433,8 @@ fun ImportDiscCard(onClick: () -> Unit) {
             }
         }
         Column {
-            Text("Abrir disco", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
-            Text("Uno que te compartieron", style = Secundario)
+            Text(tr("Abrir disco"), style = Cuerpo.copy(fontWeight = FontWeight.SemiBold))
+            Text(tr("Uno que te compartieron"), style = Secundario)
         }
     }
 }
@@ -422,8 +452,8 @@ fun NewDiscoCard(onClick: () -> Unit) {
             }
         }
         Column {
-            Text("Nuevo disco", style = Cuerpo.copy(fontWeight = FontWeight.SemiBold, color = C.Rojo))
-            Text("Arma tu propio vinilo", style = Secundario)
+            Text(tr("Nuevo disco"), style = Cuerpo.copy(fontWeight = FontWeight.SemiBold, color = C.Rojo))
+            Text(tr("Arma tu propio vinilo"), style = Secundario)
         }
     }
 }
@@ -486,7 +516,7 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
     val title = disco?.name ?: album?.title ?: ""
     val artist = when {
         album != null -> album.artist
-        else -> tracks.map { it.artist }.distinct().let { if (it.size == 1) it.first() else "Varios artistas" }
+        else -> tracks.map { it.artist }.distinct().let { if (it.size == 1) it.first() else tr("Varios artistas") }
     }
     val total = tracks.sumOf { it.durationMs }
     val year = if ((album?.year ?: 0) > 0) "${album?.year} · " else ""
@@ -501,17 +531,17 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
             .padding(start = 22.dp, end = 22.dp, top = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SoftButton(Ico.Back, "Volver", onClick = onBack)
+            SoftButton(Ico.Back, tr("Volver"), onClick = onBack)
             Spacer(Modifier.weight(1f))
             if (album != null) {
                 val fav = album.id in favs
-                SoftButton(if (fav) Ico.HeartFull else Ico.Heart, if (fav) "Quitar de favoritos" else "Añadir a favoritos", tint = C.Rojo) {
+                SoftButton(if (fav) Ico.HeartFull else Ico.Heart, if (fav) tr("Quitar de favoritos") else tr("Añadir a favoritos"), tint = C.Rojo) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     Engine.toggleFavorite(album.id)
                 }
                 Spacer(Modifier.width(10.dp))
             }
-            SoftButton(Ico.More, "Más opciones") { menu = true }
+            SoftButton(Ico.More, tr("Más opciones")) { menu = true }
         }
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.Bottom) {
@@ -526,10 +556,10 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
                 }
             }
             Column(Modifier.padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (disco != null) Text("MI DISCO", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, color = C.Rojo, fontWeight = FontWeight.SemiBold))
+                if (disco != null) Text(tr("MI DISCO"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, color = C.Rojo, fontWeight = FontWeight.SemiBold))
                 Text(title, style = Titulo.copy(fontSize = 28.sp, lineHeight = 32.sp), maxLines = 3, overflow = TextOverflow.Ellipsis)
                 Text(artist, style = Cuerpo.copy(fontSize = 14.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("$year${tracks.size} canciones · ${total / 60000} min", style = Secundario.copy(fontSize = 12.sp))
+                Text(tr("%s%s canciones · %s min", year, tracks.size, total / 60000), style = Secundario.copy(fontSize = 12.sp))
             }
         }
         Spacer(Modifier.height(18.dp))
@@ -541,7 +571,7 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
             ) {
                 Icon(Ico.Play, null, tint = C.SobreRojo, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Poner el disco", style = Cuerpo.copy(color = C.SobreRojo, fontWeight = FontWeight.Medium))
+                Text(tr("Poner el disco"), style = Cuerpo.copy(color = C.SobreRojo, fontWeight = FontWeight.Medium))
             }
             Row(
                 Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(24.dp)).background(C.Arena)
@@ -550,13 +580,13 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
             ) {
                 Icon(Ico.Shuffle, null, tint = C.Carbon, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Aleatorio", style = Cuerpo.copy(fontWeight = FontWeight.Medium))
+                Text(tr("Aleatorio"), style = Cuerpo.copy(fontWeight = FontWeight.Medium))
             }
         }
         Spacer(Modifier.height(12.dp))
         if (disco != null && tracks.isEmpty()) {
             Box(Modifier.fillMaxWidth().weight(1f)) {
-                EmptyHint("Disco vacío", "Añade canciones para armar tu vinilo.", "Añadir canciones") {
+                EmptyHint(tr("Disco vacío"), tr("Añade canciones para armar tu vinilo."), tr("Añadir canciones")) {
                     onOpen(Detail.PickSongs(disco.id))
                 }
             }
@@ -569,7 +599,7 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.Arena).padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Usa las flechas para ordenar tu disco", style = Secundario.copy(fontSize = 12.sp), modifier = Modifier.weight(1f))
+                    Text(tr("Usa las flechas para ordenar tu disco"), style = Secundario.copy(fontSize = 12.sp), modifier = Modifier.weight(1f))
                     Pill("Listo", selected = true) { ordering = false }
                 }
             }
@@ -580,10 +610,10 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
                         val long = disco != null && side > 22 * 60_000L
                         Row(Modifier.padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                (if (i == 0) "LADO A" else "LADO B") + " · " + fmtTime(side),
+                                (if (i == 0) tr("LADO A") else tr("LADO B")) + " · " + fmtTime(side),
                                 style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold, color = if (long) C.Rojo else C.Tierra)
                             )
-                            if (long) Text("  más largo que un LP (22 min)", style = Secundario.copy(fontSize = 11.sp, color = C.Rojo))
+                            if (long) Text(tr("  más largo que un LP (22 min)"), style = Secundario.copy(fontSize = 11.sp, color = C.Rojo))
                         }
                     }
                     val on = current?.id == t.id
@@ -613,11 +643,11 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
                             Box(
                                 Modifier.size(40.dp).clip(CircleShape).clickable(enabled = i > 0) { Engine.moveInDisco(disco.id, i, i - 1) },
                                 contentAlignment = Alignment.Center
-                            ) { Icon(Ico.Up, "Subir", tint = if (i > 0) C.Carbon else C.Linea, modifier = Modifier.size(18.dp)) }
+                            ) { Icon(Ico.Up, tr("Subir"), tint = if (i > 0) C.Carbon else C.Linea, modifier = Modifier.size(18.dp)) }
                             Box(
                                 Modifier.size(40.dp).clip(CircleShape).clickable(enabled = i < tracks.size - 1) { Engine.moveInDisco(disco.id, i, i + 1) },
                                 contentAlignment = Alignment.Center
-                            ) { Icon(Ico.Down, "Bajar", tint = if (i < tracks.size - 1) C.Carbon else C.Linea, modifier = Modifier.size(18.dp)) }
+                            ) { Icon(Ico.Down, tr("Bajar"), tint = if (i < tracks.size - 1) C.Carbon else C.Linea, modifier = Modifier.size(18.dp)) }
                         } else {
                             Text(fmtTime(t.durationMs), style = Secundario.copy(fontSize = 12.sp, color = if (on) C.Rojo else C.Tierra))
                         }
@@ -630,45 +660,45 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
 
     if (menu) {
         val queueActions = listOf(
-            SheetAction("Reproducir después", Ico.PlayNext) { vm.playNext(tracks) },
-            SheetAction("Añadir a la cola", Ico.QueueAdd) { vm.addToQueue(tracks) },
+            SheetAction(tr("Reproducir después"), Ico.PlayNext) { vm.playNext(tracks) },
+            SheetAction(tr("Añadir a la cola"), Ico.QueueAdd) { vm.addToQueue(tracks) },
         )
-        val share = SheetAction("Compartir disco", Ico.Upload) {
+        val share = SheetAction(tr("Compartir disco"), Ico.Upload) {
             scope.launch {
                 val uri = Sharing.exportDisc(ctx, title, tracks)
                 if (uri != null) ctx.startActivity(Sharing.shareIntent(uri, title))
-                else android.widget.Toast.makeText(ctx, "No se pudo preparar el disco", android.widget.Toast.LENGTH_LONG).show()
+                else android.widget.Toast.makeText(ctx, tr("No se pudo preparar el disco"), android.widget.Toast.LENGTH_LONG).show()
             }
         }
         val actions = queueActions + share + if (disco != null) listOf(
-            SheetAction("Ordenar canciones", Ico.ListIco) { ordering = true },
-            SheetAction("Añadir canciones", Ico.Plus) { onOpen(Detail.PickSongs(disco.id)) },
-            SheetAction("Cambiar nombre", Ico.Pencil) { renaming = true },
-            SheetAction("Eliminar disco", Ico.Trash, destructive = true) { Engine.deleteDisco(disco.id) },
+            SheetAction(tr("Ordenar canciones"), Ico.ListIco) { ordering = true },
+            SheetAction(tr("Añadir canciones"), Ico.Plus) { onOpen(Detail.PickSongs(disco.id)) },
+            SheetAction(tr("Cambiar nombre"), Ico.Pencil) { renaming = true },
+            SheetAction(tr("Eliminar disco"), Ico.Trash, destructive = true) { Engine.deleteDisco(disco.id) },
         ) else listOf(
-            SheetAction("Añadir a un disco", Ico.Disc) { addToDisco = tracks.map { it.id } },
-            SheetAction("Ocultar de la biblioteca", Ico.Hide, destructive = true) { album?.let { Engine.hideAlbum(it.id) } },
+            SheetAction(tr("Añadir a un disco"), Ico.Disc) { addToDisco = tracks.map { it.id } },
+            SheetAction(tr("Ocultar de la biblioteca"), Ico.Hide, destructive = true) { album?.let { Engine.hideAlbum(it.id) } },
         )
         ActionSheet(title, artist, actions, onDismiss = { menu = false })
     }
     songMenu?.let { t ->
         val queueActions = listOf(
-            SheetAction("Reproducir después", Ico.PlayNext) { vm.playNext(listOf(t)) },
-            SheetAction("Añadir a la cola", Ico.QueueAdd) { vm.addToQueue(listOf(t)) },
+            SheetAction(tr("Reproducir después"), Ico.PlayNext) { vm.playNext(listOf(t)) },
+            SheetAction(tr("Añadir a la cola"), Ico.QueueAdd) { vm.addToQueue(listOf(t)) },
         )
         val actions = queueActions + if (disco != null) listOf(
-            SheetAction("Quitar de este disco", Ico.Close, destructive = true) {
+            SheetAction(tr("Quitar de este disco"), Ico.Close, destructive = true) {
                 Engine.setDiscoTracks(disco.id, disco.trackIds.filter { it != t.id })
             },
         ) else listOf(
-            SheetAction("Añadir a un disco", Ico.Disc) { addToDisco = listOf(t.id) },
-            SheetAction("Ocultar canción", Ico.Hide, destructive = true) { Engine.hideTrack(t.id) },
+            SheetAction(tr("Añadir a un disco"), Ico.Disc) { addToDisco = listOf(t.id) },
+            SheetAction(tr("Ocultar canción"), Ico.Hide, destructive = true) { Engine.hideTrack(t.id) },
         )
         ActionSheet(t.title, t.artist, actions, onDismiss = { songMenu = null })
     }
     addToDisco?.let { ids -> AddToDiscoSheet(ids) { addToDisco = null } }
     if (renaming && disco != null) {
-        NameDialog("Cambiar nombre", disco.name, "Guardar", onDismiss = { renaming = false }) { Engine.renameDisco(disco.id, it) }
+        NameDialog(tr("Cambiar nombre"), disco.name, tr("Guardar"), onDismiss = { renaming = false }) { Engine.renameDisco(disco.id, it) }
     }
 }
 
@@ -697,17 +727,17 @@ fun PickSongsScreen(discoId: Long, onDone: () -> Unit) {
             .padding(start = 22.dp, end = 22.dp, top = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SoftButton(Ico.Close, "Cancelar", onClick = onDone)
+            SoftButton(Ico.Close, tr("Cancelar"), onClick = onDone)
             Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
                 Text(disco.name, style = Titulo.copy(fontSize = 22.sp, lineHeight = 26.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${selected.size} canciones elegidas", style = Secundario.copy(fontSize = 12.sp))
+                Text(tr("%s canciones elegidas", selected.size), style = Secundario.copy(fontSize = 12.sp))
             }
             Box(
                 Modifier.height(44.dp).clip(RoundedCornerShape(22.dp)).background(C.Rojo)
                     .clickable { Engine.setDiscoTracks(disco.id, selected.toList()); onDone() }
                     .padding(horizontal = 18.dp),
                 contentAlignment = Alignment.Center
-            ) { Text("Listo", style = Cuerpo.copy(color = C.SobreRojo, fontWeight = FontWeight.SemiBold)) }
+            ) { Text(tr("Listo"), style = Cuerpo.copy(color = C.SobreRojo, fontWeight = FontWeight.SemiBold)) }
         }
         Spacer(Modifier.height(14.dp))
         OutlinedTextField(
@@ -715,7 +745,7 @@ fun PickSongsScreen(discoId: Long, onDone: () -> Unit) {
             onValueChange = { query = it },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Buscar", style = Cuerpo.copy(color = C.Piedra)) },
+            placeholder = { Text(tr("Buscar"), style = Cuerpo.copy(color = C.Piedra)) },
             leadingIcon = { Icon(Ico.Search, null, tint = C.Tierra, modifier = Modifier.size(20.dp)) },
             textStyle = Cuerpo,
             shape = RoundedCornerShape(22.dp),
@@ -744,7 +774,7 @@ fun PickSongsScreen(discoId: Long, onDone: () -> Unit) {
                         Modifier.size(26.dp).clip(CircleShape).background(if (on) C.Rojo else C.Arena),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (on) Icon(Ico.Check, "Elegida", tint = C.SobreRojo, modifier = Modifier.size(16.dp))
+                        if (on) Icon(Ico.Check, tr("Elegida"), tint = C.SobreRojo, modifier = Modifier.size(16.dp))
                     }
                 }
             }
@@ -756,7 +786,7 @@ fun PickSongsScreen(discoId: Long, onDone: () -> Unit) {
 @Composable
 fun RecentRow(albums: List<Album>, disc: Boolean, onOpen: (Album) -> Unit) {
     Column {
-        Text("VOLVER A ESCUCHAR", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+        Text(tr("VOLVER A ESCUCHAR"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(10.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             rowItems(albums, key = { "r" + it.id }) { a ->
@@ -773,6 +803,6 @@ fun RecentRow(albums: List<Album>, disc: Boolean, onOpen: (Album) -> Unit) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        Text("TODOS LOS ÁLBUMES", style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
+        Text(tr("TODOS LOS ÁLBUMES"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
     }
 }

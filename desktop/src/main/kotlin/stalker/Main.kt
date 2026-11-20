@@ -111,7 +111,32 @@ class AppState(val player: Player) {
     var floatDisc by mutableStateOf(Prefs.floatDisc)
     var mainWindow: java.awt.Window? = null
 
+    private val ui = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /** Al terminar la cola entra el siguiente disco (con la pausa de cambiar el vinilo si terminó solo). */
+    private fun onQueueEnd(manual: Boolean) {
+        ui.launch {
+            if (Jam.core.active && !Jam.core.host) return@launch // en una Jam como invitado manda quien la abrió
+            val q = player.queue
+            val (next, title) = Continuous.next(albums, favorites, q, player.queueTitle) ?: return@launch
+            if (!manual) {
+                delay(Continuous.PAUSE_MS)
+                if (player.playing || player.queue !== q) return@launch // alguien eligió otra cosa
+            }
+            player.setQueue(next, 0, title, play = true)
+        }
+    }
+
+    /** Rocola: toda la estantería (o solo los favoritos) al azar. */
+    fun rocola(onlyFavorites: Boolean) {
+        val list = Continuous.rocola(albums, favorites, onlyFavorites)
+        if (list.isEmpty()) return
+        player.setQueue(list, 0, if (onlyFavorites) Continuous.ROCOLA_FAVS else Continuous.ROCOLA, play = true)
+        view = View.Sala
+    }
+
     fun start() {
+        player.onQueueEnd = { manual -> onQueueEnd(manual) }
         Jam.attach(this)
         CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {
             var n = 0
@@ -157,7 +182,7 @@ class AppState(val player: Player) {
             val dir = withContext(Dispatchers.Main) {
                 val fc = JFileChooser(System.getProperty("user.home"))
                 fc.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-                fc.dialogTitle = "Elige una carpeta con música"
+                fc.dialogTitle = tr("Elige una carpeta con música")
                 if (fc.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) fc.selectedFile else null
             } ?: return@launch
             folders = (folders + dir.absolutePath).distinct()
@@ -169,16 +194,16 @@ class AppState(val player: Player) {
     /** Abre un disco compartido desde el celular (.stalker.zip) y lo guarda en Música\\Stalker. */
     fun importDisc(file: File) {
         io.launch {
-            notice = "Abriendo ${file.name}…"
+            notice = tr("Abriendo %s…", file.name)
             val res = try { Discs.import(file) } catch (t: Throwable) { null }
-            if (res == null) { notice = "No se pudo abrir ${file.name}"; return@launch }
+            if (res == null) { notice = tr("No se pudo abrir %s", file.name); return@launch }
             val root = res.parentFile.parentFile.absolutePath
             if (folders.none { root.startsWith(it, ignoreCase = true) || res.absolutePath.startsWith(it, ignoreCase = true) }) {
                 folders = folders + root
                 Prefs.folders = folders
             }
             scan()
-            notice = "Disco «${res.name}» agregado a la estantería"
+            notice = tr("Disco «%s» agregado a la estantería", res.name)
             delay(5000)
             notice = null
         }
@@ -188,8 +213,8 @@ class AppState(val player: Player) {
         io.launch {
             val f = withContext(Dispatchers.Main) {
                 val fc = JFileChooser(System.getProperty("user.home") + File.separator + "Downloads")
-                fc.dialogTitle = "Abrir un disco compartido (.stalker.zip)"
-                fc.fileFilter = javax.swing.filechooser.FileNameExtensionFilter("Disco de Stalker (.zip)", "zip")
+                fc.dialogTitle = tr("Abrir un disco compartido (.stalker.zip)")
+                fc.fileFilter = javax.swing.filechooser.FileNameExtensionFilter(tr("Disco de Stalker (.zip)"), "zip")
                 if (fc.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) fc.selectedFile else null
             } ?: return@launch
             importDisc(f)
@@ -270,7 +295,8 @@ fun main(args: Array<String>) {
                     if (window.renderApi.name.startsWith("SOFTWARE")) Prefs.motion = false
                 }
             }
-            MainWindow(app, this, mainState)
+            // Al cambiar de idioma se redibuja toda la ventana.
+            androidx.compose.runtime.key(I18n.choice) { MainWindow(app, this, mainState) }
         }
 
         LaunchedEffect(mainState.isMinimized, app.mini) { player.background = mainState.isMinimized || app.mini }
@@ -369,8 +395,8 @@ private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.comp
                     Row(
                         Modifier.clip(RoundedCornerShape(50)).background(Color(0x1AF1DFC4)).border(1.dp, C.Linea, RoundedCornerShape(50)).padding(3.dp),
                     ) {
-                        Seg("Sala", app.view == View.Sala) { app.view = View.Sala }
-                        Seg("Estantería", app.view == View.Shelf) { app.view = View.Shelf }
+                        Seg(tr("Sala"), app.view == View.Sala) { app.view = View.Sala }
+                        Seg(tr("Estantería"), app.view == View.Shelf) { app.view = View.Shelf }
                     }
                     Spacer(Modifier.weight(1f))
                     RoundButton(Ico.Jam, {
@@ -383,10 +409,10 @@ private fun MainWindow(app: AppState, scope: FrameWindowScope, st: androidx.comp
                         app.immersive = true; app.view = View.Sala; st.placement = WindowPlacement.Fullscreen
                     }, 30.dp, 14.dp, tint = C.Tenue)
                     Spacer(Modifier.width(14.dp))
-                    WinButton(Ico.Mini, "Modo mini") { app.mini = true }
-                    WinButton(Ico.Minimize, "Minimizar") { st.isMinimized = true }
-                    WinButton(if (restoreBounds != null) Ico.Restore else Ico.Maximize, "Maximizar") { toggleMax() }
-                    WinButton(Ico.Close, "Cerrar", danger = true) { window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_CLOSING)) }
+                    WinButton(Ico.Mini, tr("Modo mini")) { app.mini = true }
+                    WinButton(Ico.Minimize, tr("Minimizar")) { st.isMinimized = true }
+                    WinButton(if (restoreBounds != null) Ico.Restore else Ico.Maximize, tr("Maximizar")) { toggleMax() }
+                    WinButton(Ico.Close, tr("Cerrar"), danger = true) { window.dispatchEvent(java.awt.event.WindowEvent(window, java.awt.event.WindowEvent.WINDOW_CLOSING)) }
                 }
             }
         } else {
@@ -499,50 +525,78 @@ fun SettingsSheet(app: AppState) {
         ) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(28.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    T("Ajustes", 24, FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    T(tr("Ajustes"), 24, FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     RoundButton(Ico.Close, { app.settings = false }, 32.dp, 13.dp)
                 }
                 Spacer(Modifier.height(22.dp))
 
-                Section("SALIDA DE AUDIO")
+                Section(tr("SALIDA DE AUDIO"))
                 Toggle(
-                    "Modo exclusivo · bit-perfect",
-                    "Stalker toma el DAC solo para sí y lo pone a la frecuencia exacta de cada archivo. Al pausar, lo suelta para que el resto del PC suene.",
+                    tr("Modo exclusivo · bit-perfect"),
+                    tr("Stalker toma el DAC solo para sí y lo pone a la frecuencia exacta de cada archivo. Al pausar, lo suelta para que el resto del PC suene."),
                     p.exclusive,
                 ) { p.changeExclusive(it) }
                 Spacer(Modifier.height(14.dp))
-                T("Dispositivo", 12, FontWeight.Medium, C.Tenue)
+                T(tr("Dispositivo"), 12, FontWeight.Medium, C.Tenue)
                 Spacer(Modifier.height(8.dp))
-                DeviceOption("Predeterminado de Windows", p.device == -1) { p.changeDevice(-1) }
+                DeviceOption(tr("Predeterminado de Windows"), p.device == -1) { p.changeDevice(-1) }
                 devices.forEachIndexed { i, (name, def) ->
-                    DeviceOption(name + if (def) "  ·  actual" else "", p.device == i) { p.changeDevice(i) }
+                    DeviceOption(name + if (def) tr("  ·  actual") else "", p.device == i) { p.changeDevice(i) }
                 }
                 Spacer(Modifier.height(10.dp))
                 SignalChain(p)
 
                 Spacer(Modifier.height(26.dp))
-                Section("VENTANA Y RENDIMIENTO")
+                Section(tr("REPRODUCCIÓN CONTINUA"))
+                var continuous by remember { mutableStateOf(Prefs.continuous) }
+                var nextOrder by remember { mutableStateOf(Prefs.nextOrder) }
                 Toggle(
-                    "Disco flotante al minimizar",
-                    "Al minimizar queda un vinilo girando sobre las demás ventanas. Pasa el mouse para pausar o cambiar de canción; doble clic para volver.",
+                    tr("Seguir con otro disco"),
+                    tr("Cuando termina un disco, el brazo vuelve y entra el siguiente."),
+                    continuous,
+                ) { continuous = it; Prefs.continuous = it }
+                if (continuous) {
+                    Spacer(Modifier.height(12.dp))
+                    T(tr("Qué disco sigue"), 12, FontWeight.Medium, C.Tenue)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("Estantería", "Al azar", "Mismo artista").forEach { m ->
+                            Pill(m, { nextOrder = m; Prefs.nextOrder = m; Continuous.resetChain() }, active = nextOrder == m)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(26.dp))
+                Section(tr("IDIOMA"))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Sistema", "Español", "English").forEach { m ->
+                        Pill(m, { I18n.set(m) }, active = I18n.choice == m)
+                    }
+                }
+
+                Spacer(Modifier.height(26.dp))
+                Section(tr("VENTANA Y RENDIMIENTO"))
+                Toggle(
+                    tr("Disco flotante al minimizar"),
+                    tr("Al minimizar queda un vinilo girando sobre las demás ventanas. Pasa el mouse para pausar o cambiar de canción; doble clic para volver."),
                     app.floatDisc,
                 ) { app.floatDisc = it; Prefs.floatDisc = it }
                 Spacer(Modifier.height(14.dp))
                 Toggle(
-                    "Estantería realista",
-                    "Discos de canto en el mueble de nogal. Apágalo para ver tu música como portadas en cuadrícula, más fácil de escoger.",
+                    tr("Estantería realista"),
+                    tr("Discos de canto en el mueble de nogal. Apágalo para ver tu música como portadas en cuadrícula, más fácil de escoger."),
                     app.shelfMode != 3,
                 ) { v -> app.shelfMode = if (v) 0 else 3; Prefs.shelfMode = app.shelfMode }
                 Spacer(Modifier.height(14.dp))
                 Toggle(
-                    "Animaciones",
-                    "Apágalas si el PC va lento: el plato y el telón se quedan quietos y la ventana solo se redibuja cuando algo cambia. El sonido es el mismo.",
+                    tr("Animaciones"),
+                    tr("Apágalas si el PC va lento: el plato y el telón se quedan quietos y la ventana solo se redibuja cuando algo cambia. El sonido es el mismo."),
                     Prefs.motion,
                 ) { Prefs.motion = it }
 
                 Spacer(Modifier.height(26.dp))
-                Section("CARPETAS DE MÚSICA")
-                T("Stalker revisa estas carpetas cada pocos minutos y agrega la música nueva sola.", 11, color = C.Apagado, maxLines = 2)
+                Section(tr("CARPETAS DE MÚSICA"))
+                T(tr("Stalker revisa estas carpetas cada pocos minutos y agrega la música nueva sola."), 11, color = C.Apagado, maxLines = 2)
                 Spacer(Modifier.height(10.dp))
                 app.folders.forEach { f ->
                     Row(
@@ -552,37 +606,37 @@ fun SettingsSheet(app: AppState) {
                         Icon(Ico.Folder, C.Tenue, 15.dp)
                         Spacer(Modifier.width(10.dp))
                         T(f, 12, modifier = Modifier.weight(1f))
-                        if (!File(f).isDirectory) T("no existe", 10, color = C.RojoVivo)
+                        if (!File(f).isDirectory) T(tr("no existe"), 10, color = C.RojoVivo)
                         RoundButton(Ico.Trash, { app.removeFolder(f) }, 28.dp, 13.dp, tint = C.Tenue)
                     }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Pill("Agregar carpeta", { app.addFolder() }, ico = Ico.Plus)
-                    Pill(if (app.scanning) "Buscando…" else "Buscar música nueva", { app.rescan() }, ico = Ico.Search)
+                    Pill(if (app.scanning) tr("Buscando…") else tr("Buscar música nueva"), { app.rescan() }, ico = Ico.Search)
                 }
                 Spacer(Modifier.height(10.dp))
                 Pill("Abrir disco compartido (.stalker.zip)", { app.pickDisc() }, ico = Ico.Shelf)
-                T("Los discos que te mandan desde Stalker en el celular se guardan en Música\\Stalker.", 10, color = C.Apagado, maxLines = 2)
+                T(tr("Los discos que te mandan desde Stalker en el celular se guardan en Música\\Stalker."), 10, color = C.Apagado, maxLines = 2)
 
                 Spacer(Modifier.height(26.dp))
-                Section("ATAJOS")
-                Shortcut("Espacio", "Reproducir / pausar")
-                Shortcut("Flechas izq. / der.", "Adelantar o retroceder 5 s (Shift: 1 s)")
-                Shortcut("Ctrl + flechas", "Canción anterior / siguiente")
-                Shortcut("Flechas arriba / abajo", "Volumen")
-                Shortcut("F", "Sala a pantalla completa")
-                Shortcut("M", "Modo mini flotante")
-                Shortcut("Rueda sobre el disco", "Mover la aguja")
+                Section(tr("ATAJOS"))
+                Shortcut(tr("Espacio"), tr("Reproducir / pausar"))
+                Shortcut(tr("Flechas izq. / der."), tr("Adelantar o retroceder 5 s (Shift: 1 s)"))
+                Shortcut(tr("Ctrl + flechas"), tr("Canción anterior / siguiente"))
+                Shortcut(tr("Flechas arriba / abajo"), tr("Volumen"))
+                Shortcut("F", tr("Sala a pantalla completa"))
+                Shortcut("M", tr("Modo mini flotante"))
+                Shortcut(tr("Rueda sobre el disco"), tr("Mover la aguja"))
 
                 Spacer(Modifier.height(26.dp))
-                Section("ACERCA DE")
+                Section(tr("ACERCA DE"))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Image(BitmapPainter(Res.logo), null, Modifier.size(54.dp).clip(RoundedCornerShape(12.dp)))
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
-                        T("Stalker para Windows $version", 14, FontWeight.SemiBold)
-                        T("Libre, gratis y sin anuncios. Para los que escuchan de verdad.", 11, color = C.Tenue, maxLines = 2)
+                        T(tr("Stalker para Windows %s", version), 14, FontWeight.SemiBold)
+                        T(tr("Libre, gratis y sin anuncios. Para los que escuchan de verdad."), 11, color = C.Tenue, maxLines = 2)
                     }
                     Pill("GitHub", { open("https://github.com/sebastianbalbinu/Stalker") })
                 }
@@ -700,9 +754,9 @@ private fun MiniWindow(app: AppState, icon: BitmapPainter) {
                     Column(Modifier.weight(1f)) {
                         T(t?.title ?: "Stalker", 14, FontWeight.SemiBold)
                         Spacer(Modifier.height(2.dp))
-                        T(t?.artist ?: "Nada en el plato", 11, color = C.Tenue)
+                        T(t?.artist ?: tr("Nada en el plato"), 11, color = C.Tenue)
                         Spacer(Modifier.height(4.dp))
-                        if (t != null) T(t.quality + if (p.bitPerfect) " · bit-perfect" else "", 10, color = if (p.bitPerfect) C.Oro else C.Apagado)
+                        if (t != null) T(t.quality + if (p.bitPerfect) tr(" · bit-perfect") else "", 10, color = if (p.bitPerfect) C.Oro else C.Apagado)
                         Spacer(Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RoundButton(Ico.Prev, { p.prev() }, 30.dp, 13.dp)

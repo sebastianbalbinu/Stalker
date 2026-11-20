@@ -16,6 +16,7 @@ import android.os.Looper
 import android.util.Size
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.BitmapLoader
@@ -113,7 +114,10 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) Engine.sleepEndOfDisco.value = false
+                if (playbackState != Player.STATE_ENDED) return
+                val sleeping = Engine.sleepEndOfDisco.value
+                Engine.sleepEndOfDisco.value = false
+                if (!sleeping) continueWithNextDisc()
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) = saveSession()
@@ -125,7 +129,31 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        session = MediaSession.Builder(this, player)
+        // El botón "siguiente" sigue disponible en la última canción para pasar al siguiente disco.
+        val sessionPlayer = object : ForwardingPlayer(player) {
+            private fun isNext(c: Int) = c == Player.COMMAND_SEEK_TO_NEXT || c == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM
+            private fun canContinue() = Engine.continuous.value
+
+            override fun getAvailableCommands(): Player.Commands {
+                val base = super.getAvailableCommands()
+                return if (canContinue()) base.buildUpon()
+                    .add(Player.COMMAND_SEEK_TO_NEXT).add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM).build()
+                else base
+            }
+
+            override fun isCommandAvailable(command: Int): Boolean =
+                (isNext(command) && canContinue()) || super.isCommandAvailable(command)
+
+            override fun seekToNext() {
+                if (!skipToNextDisc()) super.seekToNext()
+            }
+
+            override fun seekToNextMediaItem() {
+                if (!skipToNextDisc()) super.seekToNextMediaItem()
+            }
+        }
+
+        session = MediaSession.Builder(this, sessionPlayer)
             .setSessionActivity(open)
             .setBitmapLoader(ArtLoader())
             .setCallback(object : MediaSession.Callback {
@@ -202,6 +230,40 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    /** Reproducción continua: el brazo vuelve, el disco se guarda y entra el siguiente. */
+    private fun continueWithNextDisc() {
+        val (tracks, title) = upcomingDisc() ?: return
+        scope.launch {
+            delay(NEXT_DISC_PAUSE_MS) // lo que tarda cambiar un vinilo
+            if (player.playbackState != Player.STATE_ENDED) return@launch // alguien eligió otra cosa
+            loadDisc(tracks, title)
+        }
+    }
+
+    /** "Siguiente" en la última canción (pantalla, notificación o audífonos): pasa al siguiente disco. */
+    private fun skipToNextDisc(): Boolean {
+        if (player.hasNextMediaItem() || player.repeatMode != Player.REPEAT_MODE_OFF) return false
+        val (tracks, title) = upcomingDisc() ?: return false
+        loadDisc(tracks, title)
+        return true
+    }
+
+    private fun upcomingDisc(): Pair<List<Track>, String>? {
+        // En una Jam como invitado manda quien la abrió.
+        if (Jam.core.active && !Jam.core.host) return null
+        val ids = (0 until player.mediaItemCount).mapNotNull { player.getMediaItemAt(it).mediaId.toLongOrNull() }
+        val next = Engine.nextDisc(ids, Engine.queueTitle.value) ?: return null
+        return if (next.first.isEmpty()) null else next
+    }
+
+    private fun loadDisc(tracks: List<Track>, title: String) {
+        Engine.setQueueTitle(title)
+        player.shuffleModeEnabled = false
+        player.setMediaItems(tracks.map { Engine.mediaItem(it) }, 0, 0L)
+        player.prepare()
+        player.play()
+    }
+
     private fun resumeLongFile(reason: Int) {
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) return
         val track = Engine.track(player.currentMediaItem?.mediaId) ?: return
@@ -253,16 +315,16 @@ class PlaybackService : MediaSessionService() {
         gainFactor = 1f
         when {
             mode == "Apagado" -> Engine.replayGainStatus.value = ""
-            bitPerfectActive() -> Engine.replayGainStatus.value = "ReplayGain en pausa: Bit-perfect no toca el volumen"
+            bitPerfectActive() -> Engine.replayGainStatus.value = tr("ReplayGain en pausa: Bit-perfect no toca el volumen")
             else -> {
                 val track = parseGain(tags["REPLAYGAIN_TRACK_GAIN"])
                 val album = parseGain(tags["REPLAYGAIN_ALBUM_GAIN"])
                 val db = if (mode == "Álbum") album ?: track else track ?: album
                 if (db == null) {
-                    Engine.replayGainStatus.value = "Esta canción no trae ReplayGain"
+                    Engine.replayGainStatus.value = tr("Esta canción no trae ReplayGain")
                 } else {
                     gainFactor = 10f.pow(db / 20f).coerceIn(0.05f, 1f)
-                    Engine.replayGainStatus.value = "ReplayGain ${if (db > 0) "+" else ""}${"%.1f".format(db)} dB"
+                    Engine.replayGainStatus.value = tr("ReplayGain %s%s dB", if (db > 0) "+" else "", "%.1f".format(db))
                 }
             }
         }
@@ -363,5 +425,6 @@ class PlaybackService : MediaSessionService() {
 
     companion object {
         const val LONG_FILE_MS = 20 * 60 * 1000L
+        const val NEXT_DISC_PAUSE_MS = 2000L
     }
 }
