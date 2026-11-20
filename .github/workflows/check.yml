@@ -1,4 +1,4 @@
-name: Revisar que compile (rama de prueba, sin publicar)
+name: Revisar que compile y abra (rama de prueba, sin publicar)
 
 on:
   push:
@@ -14,7 +14,39 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "8.9" }
       - run: gradle :app:assembleRelease --no-daemon
-      - uses: actions/upload-artifact@v4
+      - name: Activar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Abrir la app en un emulador y ver que no se cierre
+        uses: reactivecircus/android-emulator-runner@v2
         with:
-          name: prueba
-          path: app/build/outputs/apk/release/app-release.apk
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: false
+          script: |
+            adb install -r app/build/outputs/apk/release/app-release.apk
+            adb shell pm grant com.sebas.stalker android.permission.READ_MEDIA_AUDIO || true
+            adb shell pm grant com.sebas.stalker android.permission.POST_NOTIFICATIONS || true
+            adb logcat -c
+            adb shell am start -W -n com.sebas.stalker/.MainActivity
+            sleep 20
+            adb shell input tap 540 2200 || true
+            sleep 5
+            adb exec-out screencap -p > pantalla.png
+            adb logcat -d > logcat.txt
+            grep -E "FATAL EXCEPTION|AndroidRuntime" -A 30 logcat.txt && exit 1 || true
+            adb shell pidof com.sebas.stalker
+      - name: Publicar registro
+        if: always()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: prueba-carga-${{ github.run_number }}
+          name: Prueba en emulador ${{ github.run_number }}
+          prerelease: true
+          files: |
+            logcat.txt
+            pantalla.png
