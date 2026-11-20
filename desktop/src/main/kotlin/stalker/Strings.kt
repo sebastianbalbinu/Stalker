@@ -528,5 +528,10 @@ internal val EN: Map<String, String> by lazy {
         put("Violín", "Violin")
         put("Chelo", "Cello")
         put("Cuerdas", "Strings")
+        put("Ese archivo no es un disco ni una canción", "That file isn't a record or a song")
+        put("Abriendo la canción…", "Opening the song…")
+        put("La canción se guardó en Música/Stalker/Recibidos", "The song was saved to Music/Stalker/Received")
+        put("Guardada en tu biblioteca · Recibidos", "Saved to your library · Received")
+        put("%s canciones guardadas en tu biblioteca", "%s songs saved to your library")
     }
 }

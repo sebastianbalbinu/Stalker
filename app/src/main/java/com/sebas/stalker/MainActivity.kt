@@ -73,19 +73,62 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Si abrieron un disco compartido desde otra app, se importa. */
+    /**
+     * Abrieron algo con Stalker desde otra app (WhatsApp, Archivos, Drive…):
+     * un disco (.stalker.zip, aunque venga como archivo genérico) se importa;
+     * una o varias canciones se guardan en la biblioteca y empiezan a sonar.
+     */
     private fun handleIncoming(intent: Intent?) {
         if (intent == null) return
-        val uri: Uri? = when (intent.action) {
-            Intent.ACTION_VIEW -> intent.data
-            Intent.ACTION_SEND -> if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        val uris: List<Uri> = when (intent.action) {
+            Intent.ACTION_VIEW -> listOfNotNull(intent.data)
+            Intent.ACTION_SEND -> listOfNotNull(
+                if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
-            else -> null
+            )
+            Intent.ACTION_SEND_MULTIPLE ->
+                (if (Build.VERSION.SDK_INT >= 33) intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                else @Suppress("DEPRECATION") intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)).orEmpty()
+            else -> emptyList()
         }
-        if (uri != null) {
-            intent.action = null
-            importDisc(uri)
+        if (uris.isEmpty()) return
+        val declared = intent.type
+        intent.action = null
+        lifecycleScope.launch {
+            val kinds = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                uris.map { it to Sharing.kindOf(this@MainActivity, it, declared) }
+            }
+            val discs = kinds.filter { it.second == Sharing.Kind.DISC }.map { it.first }
+            val songs = kinds.filter { it.second == Sharing.Kind.SONG }.map { it.first }
+            for (d in discs) toast(Sharing.importDisc(this@MainActivity, d))
+            if (songs.isNotEmpty()) playIncoming(songs)
+            else if (discs.isEmpty()) toast(tr("Ese archivo no es un disco ni una canción"))
+            if (discs.isNotEmpty() && songs.isEmpty()) vm.rescan()
         }
+    }
+
+    /** Guarda las canciones, espera a que Android las registre y las pone a sonar. */
+    private suspend fun playIncoming(uris: List<Uri>) {
+        val ids = Sharing.importSongs(this, uris)
+        if (ids.isEmpty()) {
+            toast(tr("No se pudo abrir el archivo"))
+            return
+        }
+        var tracks: List<Track> = emptyList()
+        for (attempt in 0 until 8) {
+            Engine.setTracks(Library.scan(this))
+            tracks = ids.mapNotNull { Engine.track(it.toString()) }
+            if (tracks.size == ids.size) break
+            kotlinx.coroutines.delay(500)
+        }
+        vm.awaitReady()
+        if (tracks.isEmpty()) {
+            toast(tr("La canción se guardó en Música/Stalker/Recibidos"))
+            return
+        }
+        vm.playList(tracks, 0, if (tracks.size == 1) tracks.first().album else tr("Recibidos"))
+        toast(if (tracks.size == 1) tr("Guardada en tu biblioteca · Recibidos") else tr("%s canciones guardadas en tu biblioteca", tracks.size))
+        vm.rescan()
     }
 
     override fun onNewIntent(intent: Intent) {

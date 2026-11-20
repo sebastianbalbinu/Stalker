@@ -34,19 +34,36 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Abrir discos compartidos (.stalker.zip) desde WhatsApp, Drive, Archivos… -->
+            <!-- Abrir discos compartidos (.stalker.zip) y canciones sueltas desde WhatsApp, Drive, Archivos…
+                 WhatsApp a veces manda el zip como archivo genérico (octet-stream): también lo aceptamos
+                 y revisamos por dentro que de verdad sea un zip. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" />
+                <data android:scheme="file" />
                 <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip" />
                 <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="multipart/x-zip" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/flac" />
+                <data android:mimeType="application/x-flac" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip" />
                 <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="multipart/x-zip" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/flac" />
+                <data android:mimeType="application/x-flac" />
             </intent-filter>
         </activity>
 

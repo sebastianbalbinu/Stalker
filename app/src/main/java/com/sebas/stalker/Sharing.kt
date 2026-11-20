@@ -126,9 +126,81 @@ object Sharing {
         }
     } catch (e: Exception) {
         null
+    } ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } // file:// y otros sin nombre
+
+    /** Qué es lo que nos mandaron: un disco (zip), una canción o nada que sirva. */
+    enum class Kind { DISC, SONG, OTHER }
+
+    fun kindOf(ctx: Context, uri: Uri, declared: String?): Kind {
+        val name = displayName(ctx, uri).orEmpty()
+        val mime = (declared ?: ctx.contentResolver.getType(uri)).orEmpty().lowercase()
+        if (Downloads.isAudio(name) || mime.startsWith("audio/") || mime.contains("flac")) return Kind.SONG
+        // Por nombre o, si viene como archivo genérico, mirando si empieza como un zip ("PK").
+        if (Downloads.isZip(name) || mime.contains("zip")) return Kind.DISC
+        return try {
+            val head = ByteArray(4)
+            ctx.contentResolver.openInputStream(uri)?.use { it.read(head) }
+            when {
+                head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte() -> Kind.DISC
+                head[0] == 'f'.code.toByte() && head[1] == 'L'.code.toByte() && head[2] == 'a'.code.toByte() && head[3] == 'C'.code.toByte() -> Kind.SONG
+                head[0] == 'I'.code.toByte() && head[1] == 'D'.code.toByte() && head[2] == '3'.code.toByte() -> Kind.SONG
+                head[0] == 'R'.code.toByte() && head[1] == 'I'.code.toByte() && head[2] == 'F'.code.toByte() -> Kind.SONG
+                else -> Kind.OTHER
+            }
+        } catch (e: Exception) {
+            Kind.OTHER
+        }
     }
 
-    private fun insertAudio(ctx: Context, folder: String, name: String, input: InputStream): Long? {
+    /**
+     * Canciones sueltas abiertas con Stalker: se guardan en Música/Stalker/Recibidos (una sola vez)
+     * y se devuelven sus ids para ponerlas a sonar.
+     */
+    suspend fun importSongs(ctx: Context, uris: List<Uri>): List<Long> = withContext(Dispatchers.IO) {
+        val out = ArrayList<Long>()
+        for ((i, uri) in uris.withIndex()) {
+            working.value = if (uris.size > 1) tr("Guardando canciones · %s", i + 1) else tr("Abriendo la canción…")
+            try {
+                var name = clean(displayName(ctx, uri) ?: "Stalker ${System.currentTimeMillis()}.flac")
+                if (!Downloads.isAudio(name)) {
+                    val m = ctx.contentResolver.getType(uri).orEmpty()
+                    name += when {
+                        m.contains("flac") -> ".flac"
+                        m.contains("mpeg") -> ".mp3"
+                        m.contains("wav") -> ".wav"
+                        m.contains("mp4") || m.contains("m4a") -> ".m4a"
+                        else -> ".flac"
+                    }
+                }
+                val existing = findReceived(ctx, name)
+                if (existing != null) { out += existing; continue }
+                ctx.contentResolver.openInputStream(uri)?.use { input ->
+                    insertAudio(ctx, "", name, input, base = "Recibidos")?.let { out += it }
+                }
+            } catch (e: Exception) {
+            }
+        }
+        working.value = null
+        out
+    }
+
+    /** Si esa canción ya se guardó antes en Recibidos, su id. */
+    private fun findReceived(ctx: Context, name: String): Long? {
+        if (Build.VERSION.SDK_INT < 29) return null
+        return try {
+            ctx.contentResolver.query(
+                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL),
+                arrayOf(MediaStore.Audio.Media._ID),
+                "${MediaStore.Audio.Media.DISPLAY_NAME} = ? AND ${MediaStore.Audio.Media.RELATIVE_PATH} LIKE ?",
+                arrayOf(name, "${Environment.DIRECTORY_MUSIC}/Stalker/Recibidos%"), null
+            )?.use { c -> if (c.moveToFirst()) c.getLong(0) else null }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun insertAudio(ctx: Context, folder: String, name: String, input: InputStream, base: String = "Discos"): Long? {
+        val sub = if (folder.isBlank()) base else "$base/$folder"
         val mime = when (Downloads.ext(name)) {
             "flac" -> "audio/flac"
             "mp3" -> "audio/mpeg"
@@ -141,7 +213,7 @@ object Sharing {
             val values = ContentValues().apply {
                 put(MediaStore.Audio.Media.DISPLAY_NAME, name)
                 put(MediaStore.Audio.Media.MIME_TYPE, mime)
-                put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Stalker/Discos/$folder")
+                put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Stalker/$sub")
                 put(MediaStore.Audio.Media.IS_PENDING, 1)
             }
             val uri = ctx.contentResolver.insert(
@@ -154,7 +226,7 @@ object Sharing {
             return ContentUris.parseId(uri)
         } else {
             @Suppress("DEPRECATION")
-            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Stalker/Discos/$folder")
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Stalker/$sub")
             dir.mkdirs()
             FileOutputStream(File(dir, name)).use { out -> input.copyTo(out, 1 shl 16) }
             return null

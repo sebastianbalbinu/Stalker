@@ -138,6 +138,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         index.value = p.currentMediaItemIndex
     }
 
+    /** Espera (hasta unos segundos) a que el reproductor esté listo; útil al abrir la app desde otra. */
+    suspend fun awaitReady() {
+        repeat(40) { if (controller != null) return; kotlinx.coroutines.delay(150) }
+    }
+
     fun playList(tracks: List<Track>, index: Int, title: String? = null, shuffled: Boolean = false) {
         val c = controller ?: return
         if (tracks.isEmpty()) return
