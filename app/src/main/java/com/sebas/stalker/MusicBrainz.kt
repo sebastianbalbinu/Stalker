@@ -77,13 +77,21 @@ object MusicBrainz {
 
     /** Consulta a MusicBrainz respetando su límite de una por segundo. */
     suspend fun ws(path: String): JSONObject? = lock.withLock {
-        val wait = 1100 - (System.currentTimeMillis() - last)
-        if (wait > 0) delay(wait)
-        try {
-            http("$WS/$path${if ('?' in path) "&" else "?"}fmt=json")?.let { JSONObject(it) }
-        } finally {
-            last = System.currentTimeMillis()
+        var attempt = 0
+        while (true) {
+            val wait = 1100 - (System.currentTimeMillis() - last)
+            if (wait > 0) delay(wait)
+            try {
+                return@withLock http("$WS/$path${if ('?' in path) "&" else "?"}fmt=json")?.let { JSONObject(it) }
+            } catch (e: IllegalStateException) {
+                // 503: MusicBrainz está ocupado; se espera un poco y se reintenta (hasta 3 veces).
+                if (e.message != "HTTP 503" || attempt++ >= 2) throw e
+                delay(2500L * attempt)
+            } finally {
+                last = System.currentTimeMillis()
+            }
         }
+        null
     }
 
     private fun clean(s: String) = s.replace("\"", " ").replace("\\", " ").trim()
