@@ -614,6 +614,18 @@ object Engine {
         writeIds("hiddenAlbums", s)
     }
 
+    /** Canciones borradas del teléfono: salen de los discos armados y de las ocultas. */
+    fun forgetTracks(ids: Set<Long>) {
+        if (ids.isEmpty()) return
+        discos.value = discos.value.map { d -> d.copy(trackIds = d.trackIds.filter { it !in ids }) }
+        saveDiscos()
+        if (hiddenTracks.value.any { it in ids }) {
+            hiddenTracks.value = hiddenTracks.value - ids
+            writeIds("hiddenTracks", hiddenTracks.value)
+        }
+        tracks.value = tracks.value.filter { it.id !in ids }
+    }
+
     fun hideTrack(trackId: Long, hide: Boolean = true) {
         val s = hiddenTracks.value.toMutableSet()
         if (hide) s.add(trackId) else s.remove(trackId)

@@ -62,6 +62,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Ventana de Android para confirmar que se borran canciones del teléfono. */
+    private val deleteLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { res ->
+        lifecycleScope.launch {
+            Deleter.confirmed(this@MainActivity, res.resultCode == RESULT_OK)
+            if (res.resultCode == RESULT_OK) vm.rescan()
+        }
+    }
+
     private val discLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? -> if (uri != null) importDisc(uri) }
@@ -134,6 +144,21 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIncoming(intent)
+        lifecycleScope.launch {
+            Deleter.request.collect { sender ->
+                if (sender != null) {
+                    try {
+                        deleteLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(sender).build())
+                    } catch (e: Exception) {
+                        Deleter.request.value = null
+                    }
+                }
+            }
+        }
+        lifecycleScope.launch {
+            Deleter.message.collect { m -> if (m != null) { toast(m); Deleter.message.value = null } }
+        }
+        lifecycleScope.launch { Deleter.done.collect { if (it > 0) vm.rescan() } }
     }
 
     private val importLauncher = registerForActivityResult(

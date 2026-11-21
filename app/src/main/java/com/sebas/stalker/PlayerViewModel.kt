@@ -325,6 +325,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Borra canciones del teléfono (Android pide confirmar). */
+    fun deleteTracks(tracks: List<Track>) {
+        viewModelScope.launch { Deleter.delete(getApplication(), tracks) }
+    }
+
     fun checkUpdatesQuiet() {
         viewModelScope.launch { Updates.check(getApplication()) }
     }

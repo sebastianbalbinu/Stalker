@@ -299,6 +299,7 @@ fun LibraryScreen(
                 SheetAction(if (fav) tr("Quitar de favoritos") else tr("Añadir a favoritos"), if (fav) Ico.HeartFull else Ico.Heart) { Engine.toggleFavorite(a.id) },
                 SheetAction(tr("Añadir a un disco"), Ico.Disc) { addToDisco = a.tracks.map { it.id } },
                 SheetAction(tr("Ocultar de la biblioteca"), Ico.Hide, destructive = true) { Engine.hideAlbum(a.id) },
+                SheetAction(tr("Borrar disco del teléfono"), Ico.Trash, destructive = true) { vm.deleteTracks(a.tracks) },
             ),
             onDismiss = { albumMenu = null }
         )
@@ -311,6 +312,7 @@ fun LibraryScreen(
                 SheetAction(tr("Añadir a la cola"), Ico.QueueAdd) { vm.addToQueue(listOf(t)) },
                 SheetAction(tr("Añadir a un disco"), Ico.Disc) { addToDisco = listOf(t.id) },
                 SheetAction(tr("Ocultar canción"), Ico.Hide, destructive = true) { Engine.hideTrack(t.id) },
+                SheetAction(tr("Borrar del teléfono"), Ico.Trash, destructive = true) { vm.deleteTracks(listOf(t)) },
             ),
             onDismiss = { songMenu = null }
         )
@@ -515,6 +517,8 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
     var songMenu by remember { mutableStateOf<Track?>(null) }
     var addToDisco by remember { mutableStateOf<List<Long>?>(null) }
     var analyzing by remember { mutableStateOf<Track?>(null) }
+    /** Modo para marcar canciones y borrarlas del teléfono (null = apagado). */
+    var picking by remember { mutableStateOf<Set<Long>?>(null) }
     var showInfo by remember { mutableStateOf(false) }
 
     val disco: Disco? = (detail as? Detail.OfDisco)?.let { d -> discos.firstOrNull { it.id == d.discoId } }
@@ -658,7 +662,11 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
                     Row(
                         Modifier.fillMaxWidth().height(56.dp)
                             .combinedClickable(
-                                onClick = { vm.playList(tracks, i, title) },
+                                onClick = {
+                                    val sel = picking
+                                    if (sel != null) picking = if (t.id in sel) sel - t.id else sel + t.id
+                                    else vm.playList(tracks, i, title)
+                                },
                                 onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); songMenu = t }
                             ),
                         verticalAlignment = Alignment.CenterVertically
@@ -686,6 +694,12 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
                                 Modifier.size(40.dp).clip(CircleShape).clickable(enabled = i < tracks.size - 1) { Engine.moveInDisco(disco.id, i, i + 1) },
                                 contentAlignment = Alignment.Center
                             ) { Icon(Ico.Down, tr("Bajar"), tint = if (i < tracks.size - 1) C.Carbon else C.Linea, modifier = Modifier.size(18.dp)) }
+                        } else if (picking != null) {
+                            val chosen = t.id in (picking ?: emptySet())
+                            Box(
+                                Modifier.size(24.dp).clip(CircleShape).background(if (chosen) C.Rojo else C.Arena),
+                                contentAlignment = Alignment.Center
+                            ) { if (chosen) Icon(Ico.Check, null, tint = C.SobreRojo, modifier = Modifier.size(14.dp)) }
                         } else {
                             Text(fmtTime(t.durationMs), style = Secundario.copy(fontSize = 12.sp, color = if (on) C.Rojo else C.Tierra))
                         }
@@ -715,9 +729,35 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
             SheetAction(tr("Eliminar disco"), Ico.Trash, destructive = true) { Engine.deleteDisco(disco.id) },
         ) else listOf(
             SheetAction(tr("Añadir a un disco"), Ico.Disc) { addToDisco = tracks.map { it.id } },
+            SheetAction(tr("Elegir canciones para borrar"), Ico.Check) { picking = emptySet() },
             SheetAction(tr("Ocultar de la biblioteca"), Ico.Hide, destructive = true) { album?.let { Engine.hideAlbum(it.id) } },
+            SheetAction(tr("Borrar disco del teléfono"), Ico.Trash, destructive = true) { vm.deleteTracks(tracks) },
         )
         ActionSheet(title, artist, actions, onDismiss = { menu = false })
+    }
+    picking?.let { sel ->
+        // Barra para borrar las canciones marcadas.
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            Row(
+                Modifier.padding(start = 16.dp, end = 16.dp, bottom = 120.dp).fillMaxWidth()
+                    .shadow(12.dp, RoundedCornerShape(22.dp)).clip(RoundedCornerShape(22.dp)).background(C.Tarjeta)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (sel.isEmpty()) tr("Toca las canciones que quieres borrar") else tr("%s elegidas", sel.size),
+                    style = Cuerpo.copy(fontSize = 14.sp), modifier = Modifier.weight(1f)
+                )
+                Pill("Cancelar", selected = false) { picking = null }
+                Spacer(Modifier.width(8.dp))
+                Pill("Borrar", selected = sel.isNotEmpty()) {
+                    if (sel.isNotEmpty()) {
+                        vm.deleteTracks(tracks.filter { it.id in sel })
+                        picking = null
+                    }
+                }
+            }
+        }
     }
     analyzing?.let { t -> AnalysisSheet(t) { analyzing = null } }
     if (showInfo && album != null) AlbumInfoSheet(album, onDismiss = { showInfo = false }, onArtist = { showInfo = false; onOpen(Detail.OfArtist(it)) })
@@ -734,6 +774,7 @@ fun CollectionScreen(detail: Detail, vm: PlayerViewModel, onBack: () -> Unit, on
             SheetAction(tr("Añadir a un disco"), Ico.Disc) { addToDisco = listOf(t.id) },
             SheetAction(tr("Analizar calidad real"), Ico.Wave) { analyzing = t },
             SheetAction(tr("Ocultar canción"), Ico.Hide, destructive = true) { Engine.hideTrack(t.id) },
+            SheetAction(tr("Borrar del teléfono"), Ico.Trash, destructive = true) { vm.deleteTracks(listOf(t)) },
         )
         ActionSheet(t.title, t.artist, actions, onDismiss = { songMenu = null })
     }

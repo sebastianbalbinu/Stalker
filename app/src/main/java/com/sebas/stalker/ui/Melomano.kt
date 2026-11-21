@@ -434,3 +434,69 @@ private fun HeadphonePicker(onDismiss: () -> Unit) {
         Spacer(Modifier.height(10.dp))
     }
 }
+
+/* ------------------------------------------------------------ canciones repetidas */
+
+@Composable
+fun DuplicatesSheet(vm: PlayerViewModel, onDismiss: () -> Unit) {
+    val all by Engine.tracks.collectAsState()
+    val groups = remember(all) { com.sebas.stalker.Deleter.duplicates(all) }
+    // Por defecto se marcan para borrar todas las copias que sobran.
+    var chosen by remember(groups) { mutableStateOf(groups.flatMap { g -> g.extra.map { it.id } }.toSet()) }
+    StalkerSheet(onDismiss) {
+        Text(tr("Canciones repetidas"), style = Titulo.copy(fontSize = 24.sp))
+        Text(
+            if (groups.isEmpty()) tr("No encontramos canciones repetidas. Tu biblioteca está limpia.")
+            else tr("Se queda la de mejor calidad (★). Las marcadas se borran del teléfono."),
+            style = Secundario
+        )
+        Spacer(Modifier.height(12.dp))
+        if (groups.isNotEmpty()) {
+            LazyColumn(Modifier.heightIn(max = 460.dp)) {
+                items(groups, key = { it.keep.id }) { g ->
+                    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        Text(g.keep.title, style = Cuerpo.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(g.keep.artist, style = Secundario.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Spacer(Modifier.height(4.dp))
+                        (listOf(g.keep) + g.extra).forEach { t ->
+                            val keep = t.id == g.keep.id
+                            val on = t.id in chosen
+                            Row(
+                                Modifier.fillMaxWidth().clickable(enabled = !keep) { chosen = if (on) chosen - t.id else chosen + t.id }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier.size(22.dp).clip(RoundedCornerShape(11.dp))
+                                        .background(if (keep) C.Arena else if (on) C.Rojo else C.Arena),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (keep) Text("★", style = Secundario.copy(fontSize = 11.sp, color = C.Carbon))
+                                    else if (on) Icon(Ico.Check, null, tint = C.SobreRojo, modifier = Modifier.size(13.dp))
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        t.album + " · " + t.mime.substringAfter('/').uppercase().replace("X-", ""),
+                                        style = Secundario.copy(fontSize = 12.sp, color = C.Carbon), maxLines = 1, overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(String.format("%.1f MB", t.sizeBytes / 1_048_576.0) + if (keep) " · " + tr("se queda") else "", style = Secundario.copy(fontSize = 11.sp))
+                                }
+                            }
+                        }
+                    }
+                    HorizontalDivider(color = C.Arena, thickness = 1.dp)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            val toDelete = groups.flatMap { it.extra }.filter { it.id in chosen }
+            Pill(
+                if (toDelete.isEmpty()) "Nada marcado" else tr("Borrar %s repetidas", toDelete.size),
+                selected = toDelete.isNotEmpty(), modifier = Modifier.fillMaxWidth()
+            ) {
+                if (toDelete.isNotEmpty()) { vm.deleteTracks(toDelete); onDismiss() }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
