@@ -64,6 +64,8 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
     val night by Engine.nightMode.collectAsState()
     val rg by Engine.replayGain.collectAsState()
     val ctx = LocalContext.current
+    var showDups by remember { mutableStateOf(false) }
+    if (showDups) DuplicatesSheet(vm) { showDups = false }
     var autoCovers by remember { mutableStateOf(com.sebas.stalker.Covers.autoEnabled(ctx)) }
     val coversBatch by com.sebas.stalker.Covers.batchStatus.collectAsState()
     var autoLyrics by remember { mutableStateOf(com.sebas.stalker.Lyrics.autoEnabled(ctx)) }
@@ -216,6 +218,10 @@ fun SystemScreen(vm: PlayerViewModel, onExport: () -> Unit, onImport: () -> Unit
             Text(tr("ALMACENAMIENTO"), style = Secundario.copy(fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             StorageCard(tracks)
+            Spacer(Modifier.height(10.dp))
+            Card {
+                SettingRow(Ico.Trash, tr("Canciones repetidas"), tr("Encuentra las que tienes dos veces y quédate con la de mejor calidad")) { showDups = true }
+            }
 
             Spacer(Modifier.height(18.dp))
             Card {

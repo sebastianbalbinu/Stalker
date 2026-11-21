@@ -42,7 +42,7 @@ fun EqScreen() {
     val active = on && !blocked
 
     CurtainSheet {
-      Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 120.dp)) {
+      Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 230.dp)) {
         ScreenHeader(tr("Ecualizador"), trailing = {
             Switch(
                 checked = on,
