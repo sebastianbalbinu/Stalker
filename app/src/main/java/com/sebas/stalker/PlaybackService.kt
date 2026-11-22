@@ -8,7 +8,6 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaMetadataRetriever
-import android.media.audiofx.Equalizer
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -49,7 +48,8 @@ class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     private lateinit var player: ExoPlayer
     private lateinit var output: AudioOutput
-    private var equalizer: Equalizer? = null
+    /** Ecualizador propio (ver SoftEq): no usa el del sistema, que en algunos Samsung deja sin sonido. */
+    private val softEq = SoftEq()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var gainFactor = 1f
@@ -73,6 +73,7 @@ class PlaybackService : MediaSessionService() {
         floatWanted = wantFloat()
         val sink = SafeAudioSink(
             DefaultAudioSink.Builder(this)
+                .setAudioProcessors(arrayOf<androidx.media3.common.audio.AudioProcessor>(softEq))
                 .setEnableFloatOutput(true)
                 .build()
         ) { floatWanted }
@@ -354,11 +355,13 @@ class PlaybackService : MediaSessionService() {
         player.prepare()
     }
 
-    /** Se puede usar audio flotante: hay DAC USB y el modo no es Normal. */
+    /** Se puede usar audio flotante: hay DAC USB, el modo no es Normal y el ecualizador no está sonando
+     *  (en flotante Media3 se salta los procesadores propios, y el ecualizador es uno de ellos). */
     @Volatile private var floatWanted = false
 
     private fun wantFloat(): Boolean =
-        Engine.outputMode.value != OutputMode.NORMAL && output.usbDevice() != null
+        Engine.outputMode.value != OutputMode.NORMAL && output.usbDevice() != null &&
+            !(Engine.eqEnabled.value && !bitPerfectActive())
 
     /** Si se conectó o quitó el DAC (o cambió el modo), reinicia el decodificador sin perder el punto. */
     private fun updateFloat() {
@@ -439,28 +442,8 @@ class PlaybackService : MediaSessionService() {
     private fun applyEq() {
         applyAutoEq()
         val want = Engine.eqEnabled.value && !bitPerfectActive()
-        try {
-            if (equalizer == null && want) {
-                equalizer = Equalizer(0, player.audioSessionId)
-            }
-            val eq = equalizer ?: return
-            if (!want) {
-                eq.enabled = false
-                return
-            }
-            val gains = Engine.presets[Engine.eqPreset.value] ?: Engine.presets.getValue("Plano")
-            val range = eq.bandLevelRange
-            for (band in 0 until eq.numberOfBands.toInt()) {
-                val hz = eq.getCenterFreq(band.toShort()) / 1000
-                val idx = Engine.presetFreqs.indices.minByOrNull { kotlin.math.abs(Engine.presetFreqs[it] - hz) } ?: 0
-                val mb = (gains[idx] * 100).coerceIn(range[0].toInt(), range[1].toInt())
-                eq.setBandLevel(band.toShort(), mb.toShort())
-            }
-            eq.enabled = true
-            Engine.eqAvailable.value = true
-        } catch (e: Exception) {
-            Engine.eqAvailable.value = false
-        }
+        softEq.gains = if (want) Engine.presets[Engine.eqPreset.value] ?: Engine.presets.getValue("Plano") else null
+        Engine.eqAvailable.value = true
     }
 
     /** Carga la carátula para la notificación y la pantalla de bloqueo. */
@@ -516,7 +499,6 @@ class PlaybackService : MediaSessionService() {
         } catch (e: Exception) {
         }
         output.clear()
-        equalizer?.release()
         headphoneEq?.release()
         session?.run {
             player.release()
