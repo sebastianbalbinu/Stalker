@@ -67,13 +67,25 @@ class PlaybackService : MediaSessionService() {
         Engine.init(this)
         output = AudioOutput(this)
 
-        // Salida en PCM flotante: conserva 24 bits sin recortar a 16.
-        val sink = DefaultAudioSink.Builder(this)
-            .setEnableFloatOutput(true)
-            .build()
+        // PCM flotante (24 bits sin recortar) solo con DAC USB en Hi-Res o Bit-perfect.
+        // En parlante, audífonos y Bluetooth va audio normal: algunos teléfonos (Samsung S24)
+        // dañan el sonido con flotante. Ver SafeAudioSink.
+        floatWanted = wantFloat()
+        val sink = SafeAudioSink(
+            DefaultAudioSink.Builder(this)
+                .setEnableFloatOutput(true)
+                .build()
+        ) { floatWanted }
+        // Para FLAC, primero el decodificador estándar de Android (el mismo en todos los teléfonos)
+        // antes que los de cada marca: algunos Samsung traen uno propio que daña el sonido.
+        val safeCodecs = MediaCodecSelector { mime, secure, tunneling ->
+            val all = MediaCodecSelector.DEFAULT.getDecoderInfos(mime, secure, tunneling)
+            if (mime != androidx.media3.common.MimeTypes.AUDIO_FLAC) all
+            else all.sortedBy { if (it.name.startsWith("c2.android.") || it.name.startsWith("OMX.google.")) 0 else 1 }
+        }
         val renderers = RenderersFactory { handler, _, audioListener, _, _ ->
             arrayOf<Renderer>(
-                MediaCodecAudioRenderer(this, MediaCodecSelector.DEFAULT, handler, audioListener, sink)
+                MediaCodecAudioRenderer(this, safeCodecs, handler, audioListener, sink)
             )
         }
 
@@ -342,8 +354,27 @@ class PlaybackService : MediaSessionService() {
         player.prepare()
     }
 
+    /** Se puede usar audio flotante: hay DAC USB y el modo no es Normal. */
+    @Volatile private var floatWanted = false
+
+    private fun wantFloat(): Boolean =
+        Engine.outputMode.value != OutputMode.NORMAL && output.usbDevice() != null
+
+    /** Si se conectó o quitó el DAC (o cambió el modo), reinicia el decodificador sin perder el punto. */
+    private fun updateFloat() {
+        val want = wantFloat()
+        if (want == floatWanted) return
+        floatWanted = want
+        if (player.mediaItemCount == 0 || player.playbackState == Player.STATE_IDLE) return
+        val playing = player.playWhenReady
+        player.stop()
+        player.prepare()
+        player.playWhenReady = playing
+    }
+
     private fun reapply() {
         if (!::player.isInitialized) return
+        updateFloat()
         val track = Engine.track(player.currentMediaItem?.mediaId)
         scope.launch {
             val info = if (track != null) Library.audioInfo(this@PlaybackService, track) else null
