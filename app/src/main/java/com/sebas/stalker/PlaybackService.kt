@@ -76,9 +76,16 @@ class PlaybackService : MediaSessionService() {
                 .setEnableFloatOutput(true)
                 .build()
         ) { floatWanted }
+        // Para FLAC, primero el decodificador estándar de Android (el mismo en todos los teléfonos)
+        // antes que los de cada marca: algunos Samsung traen uno propio que daña el sonido.
+        val safeCodecs = MediaCodecSelector { mime, secure, tunneling ->
+            val all = MediaCodecSelector.DEFAULT.getDecoderInfos(mime, secure, tunneling)
+            if (mime != androidx.media3.common.MimeTypes.AUDIO_FLAC) all
+            else all.sortedBy { if (it.name.startsWith("c2.android.") || it.name.startsWith("OMX.google.")) 0 else 1 }
+        }
         val renderers = RenderersFactory { handler, _, audioListener, _, _ ->
             arrayOf<Renderer>(
-                MediaCodecAudioRenderer(this, MediaCodecSelector.DEFAULT, handler, audioListener, sink)
+                MediaCodecAudioRenderer(this, safeCodecs, handler, audioListener, sink)
             )
         }
 
